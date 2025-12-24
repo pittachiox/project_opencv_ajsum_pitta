@@ -128,6 +128,7 @@ namespace ConsoleApplication3 {
 			// 
 			// uploadToolStripMenuItem
 			// 
+			this->uploadToolStripMenuItem->BackColor = System::Drawing::Color::IndianRed;
 			this->uploadToolStripMenuItem->Name = L"uploadToolStripMenuItem";
 			this->uploadToolStripMenuItem->Size = System::Drawing::Size(56, 20);
 			this->uploadToolStripMenuItem->Text = L"upload";
