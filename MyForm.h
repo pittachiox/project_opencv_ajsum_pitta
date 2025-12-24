@@ -1,7 +1,9 @@
 ﻿#pragma once
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
+#include <opencv2/imgcodecs.hpp>
 #include "UploadForm.h"
+
 namespace ConsoleApplication3 {
 
 	using namespace System;
@@ -11,9 +13,6 @@ namespace ConsoleApplication3 {
 	using namespace System::Data;
 	using namespace System::Drawing;
 
-	/// <summary>
-	/// Summary for MyForm
-	/// </summary>
 	public ref class MyForm : public System::Windows::Forms::Form
 	{
 	public:
@@ -23,9 +22,6 @@ namespace ConsoleApplication3 {
 		}
 
 	protected:
-		/// <summary>
-		/// Clean up any resources being used.
-		/// </summary>
 		~MyForm()
 		{
 			if (components)
@@ -35,32 +31,10 @@ namespace ConsoleApplication3 {
 		}
 
 	private: System::Windows::Forms::MenuStrip^ menuStrip1;
-
-
-
-
-
-
-		   // แก้จุดที่ 1: ประกาศตัวแปรชื่อ openFileDialog (ไม่มีเลข 1)
 	private: System::Windows::Forms::OpenFileDialog^ openFileDialog;
-
-
-
-
-
-
-
-
-	private: System::ComponentModel::Container^ components;
-
-
 	private: System::Windows::Forms::SaveFileDialog^ saveFileDialog;
-
-
 	private: System::Windows::Forms::ToolStripMenuItem^ uploadToolStripMenuItem;
 	private: System::Windows::Forms::SplitContainer^ splitContainer1;
-
-
 	private: System::Windows::Forms::Label^ label2;
 	private: System::Windows::Forms::Label^ label1;
 	private: System::Windows::Forms::PictureBox^ pictureBox1;
@@ -71,35 +45,12 @@ namespace ConsoleApplication3 {
 	private: System::Windows::Forms::Button^ button5;
 	private: System::Windows::Forms::Button^ button4;
 	private: System::Windows::Forms::Button^ button3;
-
+	private: System::ComponentModel::Container^ components;
 
 	private:
 		Bitmap^ bmp;
 
-	// ฟังก์ชันสร้าง GraphicsPath สำหรับมุมโค้ง
-	System::Drawing::Drawing2D::GraphicsPath^ CreateRoundedRectanglePath(System::Drawing::Rectangle rect, int radius)
-	{
-		auto path = gcnew System::Drawing::Drawing2D::GraphicsPath();
-		int diameter = radius * 2;
-		auto arc = System::Drawing::Rectangle(rect.X, rect.Y, diameter, diameter);
-		
-		path->AddArc(arc, 180, 90);
-		arc.X = rect.Right - diameter;
-		path->AddArc(arc, 270, 90);
-		arc.Y = rect.Bottom - diameter;
-		path->AddArc(arc, 0, 90);
-		arc.X = rect.Left;
-		path->AddArc(arc, 90, 90);
-		path->CloseFigure();
-		
-		return path;
-	}
-
 #pragma region Windows Form Designer generated code
-		/// <summary>
-		/// Required method for Designer support - do not modify
-		/// the contents of this method with the code editor.
-		/// </summary>
 		void InitializeComponent(void)
 		{
 			this->menuStrip1 = (gcnew System::Windows::Forms::MenuStrip());
@@ -135,7 +86,6 @@ namespace ConsoleApplication3 {
 			this->menuStrip1->Size = System::Drawing::Size(64, 24);
 			this->menuStrip1->TabIndex = 0;
 			this->menuStrip1->Text = L"menuStrip1";
-			this->menuStrip1->ItemClicked += gcnew System::Windows::Forms::ToolStripItemClickedEventHandler(this, &MyForm::menuStrip1_ItemClicked);
 			// 
 			// uploadToolStripMenuItem
 			// 
@@ -148,12 +98,12 @@ namespace ConsoleApplication3 {
 			// openFileDialog
 			// 
 			this->openFileDialog->FileName = L"openFileDialog";
-			this->openFileDialog->Filter = L"Image files|*.jpg;*.png";
+			this->openFileDialog->Filter = L"Image files|*.jpg;*.png;*.jpeg;*.bmp";
 			// 
 			// saveFileDialog
 			// 
 			this->saveFileDialog->DefaultExt = L"png";
-			this->saveFileDialog->Filter = L"Image files | *.jpg; *.png";
+			this->saveFileDialog->Filter = L"Image files|*.jpg;*.png;*.bmp";
 			// 
 			// splitContainer1
 			// 
@@ -197,7 +147,6 @@ namespace ConsoleApplication3 {
 			this->label2->Size = System::Drawing::Size(245, 23);
 			this->label2->TabIndex = 1;
 			this->label2->Text = L"ลากเมาส์บนภาพเพื่อกำหนดช่องจอด";
-			this->label2->Click += gcnew System::EventHandler(this, &MyForm::label2_Click);
 			// 
 			// label1
 			// 
@@ -261,6 +210,7 @@ namespace ConsoleApplication3 {
 			this->button4->TabIndex = 7;
 			this->button4->Text = L"save";
 			this->button4->UseVisualStyleBackColor = false;
+			this->button4->Click += gcnew System::EventHandler(this, &MyForm::button4_Click);
 			// 
 			// button3
 			// 
@@ -328,7 +278,6 @@ namespace ConsoleApplication3 {
 			this->label4->Size = System::Drawing::Size(257, 30);
 			this->label4->TabIndex = 3;
 			this->label4->Text = L"รายการช่องจอด (ROI List)";
-			this->label4->Click += gcnew System::EventHandler(this, &MyForm::label4_Click);
 			// 
 			// label3
 			// 
@@ -343,7 +292,6 @@ namespace ConsoleApplication3 {
 			this->label3->Size = System::Drawing::Size(215, 31);
 			this->label3->TabIndex = 2;
 			this->label3->Text = L"เลือกเฟรม & เครื่องมือ";
-			this->label3->Click += gcnew System::EventHandler(this, &MyForm::label3_Click);
 			// 
 			// MyForm
 			// 
@@ -364,142 +312,19 @@ namespace ConsoleApplication3 {
 			this->splitContainer1->ResumeLayout(false);
 			(cli::safe_cast<System::ComponentModel::ISupportInitialize^>(this->pictureBox1))->EndInit();
 			this->ResumeLayout(false);
-
 		}
 #pragma endregion
 
-		// --- ส่วนของการทำงาน (Event Handlers) ---
-
-	private: System::Void exitToolStripMenuItem_Click(System::Object^ sender, System::EventArgs^ e) {
-		Close();
+	private: System::Void uploadToolStripMenuItem_Click(System::Object^ sender, System::EventArgs^ e) {
+		UploadForm^ form = gcnew UploadForm();
+		form->Show();
 	}
 
-	private: System::Void toolStripMenuItem2_Click(System::Object^ sender, System::EventArgs^ e) {
-		// แก้จุดที่ 4: เรียกใช้ openFileDialog (ไม่มีเลข 1)
-		if (openFileDialog->ShowDialog() == System::Windows::Forms::DialogResult::OK) {
-
-			// แก้จุดที่ 5: เรียกใช้ openFileDialog->FileName (ไม่มีเลข 1)
-			Bitmap^ image = gcnew Bitmap(openFileDialog->FileName);
-
-			bmp = gcnew Bitmap(image->Size.Width, image->Size.Height, System::Drawing::Imaging::PixelFormat::Format24bppRgb);
-			bmp->SetResolution(image->HorizontalResolution, image->VerticalResolution);
-
-			Graphics^ g = Graphics::FromImage(bmp);
-			g->DrawImage(image, 0, 0);
-
-			delete image;
-			pictureBox1->Image = bmp;
-		}
-	}
-
-	private: System::Void toolStripMenuItem1_Click(System::Object^ sender, System::EventArgs^ e) {}
-	private: System::Void openFileDialog1_FileOk(System::Object^ sender, System::ComponentModel::CancelEventArgs^ e) {}
-	private: System::Void toolStripContainer1_ContentPanel_Load(System::Object^ sender, System::EventArgs^ e) {}
-	private: System::Void pictureBox1_Click(System::Object^ sender, System::EventArgs^ e) {}
-	private: System::Void imageToolStripMenuItem_Click(System::Object^ sender, System::EventArgs^ e) {}
-
-	private: System::Void drawlineToolStripMenuItem_Click(System::Object^ sender, System::EventArgs^ e) {
-		using namespace cv;
-		if (bmp == nullptr) return; // เพิ่มกัน Error กรณีไม่มีรูป
-		System::Drawing::Rectangle rect = System::Drawing::Rectangle(0, 0, bmp->Width, bmp->Height);
-		System::Drawing::Imaging::BitmapData^ bmpData = bmp->LockBits(rect, System::Drawing::Imaging::ImageLockMode::ReadWrite, bmp->PixelFormat);
-		Mat image(bmp->Height, bmp->Width, CV_8UC3, bmpData->Scan0.ToPointer(), bmpData->Stride);
-
-		line(image, cv::Point(0, 0), cv::Point(bmp->Width, bmp->Height), Scalar(0, 0, 255), 5);
-
-		bmp->UnlockBits(bmpData);
-		pictureBox1->Image = bmp;
-	}
-
-	private: System::Void drawCircleToolStripMenuItem_Click(System::Object^ sender, System::EventArgs^ e) {
-		using namespace cv;
-		if (bmp == nullptr) return;
-		System::Drawing::Rectangle rect = System::Drawing::Rectangle(0, 0, bmp->Width, bmp->Height);
-		System::Drawing::Imaging::BitmapData^ bmpData = bmp->LockBits(rect, System::Drawing::Imaging::ImageLockMode::ReadWrite, bmp->PixelFormat);
-		Mat image(bmp->Height, bmp->Width, CV_8UC3, bmpData->Scan0.ToPointer(), bmpData->Stride);
-
-		circle(image, cv::Point(50, 50), 20, CV_RGB(255, 0, 0), 3);
-
-		bmp->UnlockBits(bmpData);
-		pictureBox1->Image = bmp;
-	}
-
-	private: System::Void convertToHSVToolStripMenuItem_Click(System::Object^ sender, System::EventArgs^ e) {
-		using namespace cv;
-		if (bmp == nullptr) return;
-		System::Drawing::Rectangle rect = System::Drawing::Rectangle(0, 0, bmp->Width, bmp->Height);
-		System::Drawing::Imaging::BitmapData^ bmpData = bmp->LockBits(rect, System::Drawing::Imaging::ImageLockMode::ReadWrite, bmp->PixelFormat);
-		Mat image(bmp->Height, bmp->Width, CV_8UC3, bmpData->Scan0.ToPointer(), bmpData->Stride);
-
-		cvtColor(image, image, COLOR_BGR2HSV);
-
-		bmp->UnlockBits(bmpData);
-		pictureBox1->Image = bmp;
-	}
-
-	private: System::Void saveFileMenu_Click(System::Object^ sender, System::EventArgs^ e) {
-		if (bmp != nullptr) {
-			// แก้จุดที่ 6: เรียกใช้ openFileDialog->FileName (ไม่มีเลข 1)
-			bmp->Save(openFileDialog->FileName);
-		}
-	}
-
-	private: System::Void saveAsFileMenu_Click(System::Object^ sender, System::EventArgs^ e) {
+	private: System::Void button4_Click(System::Object^ sender, System::EventArgs^ e) {
 		if ((bmp != nullptr) && (saveFileDialog->ShowDialog() == System::Windows::Forms::DialogResult::OK))
 		{
 			bmp->Save(saveFileDialog->FileName);
 		}
 	}
-	private: System::Void toolStripButton1_Click(System::Object^ sender, System::EventArgs^ e) {
-		// แก้จุดที่ 4: เรียกใช้ openFileDialog (ไม่มีเลข 1)
-		if (openFileDialog->ShowDialog() == System::Windows::Forms::DialogResult::OK) {
-
-			// แก้จุดที่ 5: เรียกใช้ openFileDialog->FileName (ไม่มีเลข 1)
-			Bitmap^ image = gcnew Bitmap(openFileDialog->FileName);
-
-			bmp = gcnew Bitmap(image->Size.Width, image->Size.Height, System::Drawing::Imaging::PixelFormat::Format24bppRgb);
-			bmp->SetResolution(image->HorizontalResolution, image->VerticalResolution);
-
-			Graphics^ g = Graphics::FromImage(bmp);
-			g->DrawImage(image, 0, 0);
-
-			delete image;
-			pictureBox1->Image = bmp;
-		}
-
-	}
-private: System::Void toolStripButton2_Click(System::Object^ sender, System::EventArgs^ e) {
-	if (bmp != nullptr) {
-		// แก้จุดที่ 6: เรียกใช้ openFileDialog->FileName (ไม่มีเลข 1)
-		bmp->Save(openFileDialog->FileName);
-	}
-}
-private: System::Void toolStripButton3_Click(System::Object^ sender, System::EventArgs^ e) {
-	if ((bmp != nullptr) && (saveFileDialog->ShowDialog() == System::Windows::Forms::DialogResult::OK))
-	{
-		bmp->Save(saveFileDialog->FileName);
-	}
-}
-private: System::Void uploadToolStripMenuItem_Click(System::Object^ sender, System::EventArgs^ e) {
-	// สร้าง Object ของหน้าต่างใหม่
-	UploadForm^ form = gcnew UploadForm();
-
-	// สั่งให้แสดงผล
-	form->Show();
-}
-private: System::Void menuStrip1_ItemClicked(System::Object^ sender, System::Windows::Forms::ToolStripItemClickedEventArgs^ e) {
-}
-private: System::Void button1_Click(System::Object^ sender, System::EventArgs^ e) {
-}
-private: System::Void pictureBox1_Click_1(System::Object^ sender, System::EventArgs^ e) {
-}
-private: System::Void label2_Click(System::Object^ sender, System::EventArgs^ e) {
-}
-
-
-private: System::Void label3_Click(System::Object^ sender, System::EventArgs^ e) {
-}
-private: System::Void label4_Click(System::Object^ sender, System::EventArgs^ e) {
-}
-};
+	};
 }
