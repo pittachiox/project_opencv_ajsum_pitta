@@ -18,6 +18,7 @@ static cv::dnn::Net* g_net = nullptr;
 static std::vector<std::string> g_classes;
 static std::vector<cv::Scalar> g_colors;
 static cv::Mat g_currentImage;
+static cv::VideoCapture* g_cap = nullptr; // Add VideoCapture
 
 // Helper function for Letterbox resizing (maintains aspect ratio)
 static cv::Mat FormatToLetterbox(const cv::Mat& source, int width, int height, float& ratio, int& dw, int& dh) {
@@ -73,8 +74,8 @@ static void InitGlobalModel(const std::string& modelPath) {
 	}
 }
 
-static void ProcessGlobalImage(const std::string& filename) {
-	g_currentImage = cv::imread(filename);
+// Refactored: Core detection logic separated from image loading
+static void DetectObjects() {
 	if (g_currentImage.empty()) return;
 	if (!g_net) return;
 
@@ -144,6 +145,31 @@ static void ProcessGlobalImage(const std::string& filename) {
 	}
 }
 
+static void ProcessGlobalImage(const std::string& filename) {
+	g_currentImage = cv::imread(filename);
+	DetectObjects();
+}
+
+static void OpenGlobalVideo(const std::string& filename) {
+	if (g_cap) {
+		delete g_cap;
+		g_cap = nullptr;
+	}
+	g_cap = new cv::VideoCapture(filename);
+}
+
+static bool ProcessNextFrame() {
+	if (!g_cap || !g_cap->isOpened()) return false;
+	
+	cv::Mat frame;
+	*g_cap >> frame;
+	if (frame.empty()) return false;
+
+	g_currentImage = frame;
+	DetectObjects();
+	return true;
+}
+
 static bool IsGlobalImageEmpty() { return g_currentImage.empty(); }
 static int GetGlobalWidth() { return g_currentImage.cols; }
 static int GetGlobalHeight() { return g_currentImage.rows; }
@@ -176,7 +202,7 @@ namespace ConsoleApplication3 {
 			
 			// Initialize YOLO Model
 			try {
-				std::string modelPath = "C:/Users/kt856/Downloads/yolo11n.onnx";
+				std::string modelPath = "C:/Users/kt856/Downloads/yolo11m.onnx";
 				InitGlobalModel(modelPath);
 			}
 			catch (const std::exception& e) {
@@ -200,6 +226,8 @@ namespace ConsoleApplication3 {
 			}
 		}
 	private: System::Windows::Forms::Button^ button1;
+	private: System::Windows::Forms::Button^ button2; // New Button for Video
+	private: System::Windows::Forms::Timer^ timer1;   // Timer for Video Playback
 	private: System::Windows::Forms::PictureBox^ pictureBox1;
 	protected:
 
@@ -209,20 +237,38 @@ namespace ConsoleApplication3 {
 #pragma region Windows Form Designer generated code
 		void InitializeComponent(void)
 		{
+			this->components = (gcnew System::ComponentModel::Container());
 			this->button1 = (gcnew System::Windows::Forms::Button());
+			this->button2 = (gcnew System::Windows::Forms::Button());
+			this->timer1 = (gcnew System::Windows::Forms::Timer(this->components));
 			this->pictureBox1 = (gcnew System::Windows::Forms::PictureBox());
 			(cli::safe_cast<System::ComponentModel::ISupportInitialize^>(this->pictureBox1))->BeginInit();
 			this->SuspendLayout();
 			// 
 			// button1
 			// 
-			this->button1->Location = System::Drawing::Point(140, 209);
+			this->button1->Location = System::Drawing::Point(50, 209);
 			this->button1->Name = L"button1";
-			this->button1->Size = System::Drawing::Size(75, 23);
+			this->button1->Size = System::Drawing::Size(100, 23);
 			this->button1->TabIndex = 0;
-			this->button1->Text = L"button1";
+			this->button1->Text = L"Upload Image";
 			this->button1->UseVisualStyleBackColor = true;
 			this->button1->Click += gcnew System::EventHandler(this, &UploadForm::button1_Click);
+			// 
+			// button2
+			// 
+			this->button2->Location = System::Drawing::Point(180, 209);
+			this->button2->Name = L"button2";
+			this->button2->Size = System::Drawing::Size(100, 23);
+			this->button2->TabIndex = 2;
+			this->button2->Text = L"Upload Video";
+			this->button2->UseVisualStyleBackColor = true;
+			this->button2->Click += gcnew System::EventHandler(this, &UploadForm::button2_Click);
+			// 
+			// timer1
+			// 
+			this->timer1->Interval = 33;
+			this->timer1->Tick += gcnew System::EventHandler(this, &UploadForm::timer1_Tick);
 			// 
 			// pictureBox1
 			// 
@@ -240,6 +286,7 @@ namespace ConsoleApplication3 {
 			this->ClientSize = System::Drawing::Size(382, 253);
 			this->Controls->Add(this->pictureBox1);
 			this->Controls->Add(this->button1);
+			this->Controls->Add(this->button2);
 			this->Name = L"UploadForm";
 			this->Text = L"Upload Window";
 			(cli::safe_cast<System::ComponentModel::ISupportInitialize^>(this->pictureBox1))->EndInit();
@@ -247,41 +294,75 @@ namespace ConsoleApplication3 {
 
 		}
 #pragma endregion
+	// Helper to update PictureBox from global image
+	private: void UpdateDisplay() {
+		if (IsGlobalImageEmpty()) return;
+
+		int w = GetGlobalWidth();
+		int h = GetGlobalHeight();
+		Bitmap^ bmp = gcnew Bitmap(w, h, System::Drawing::Imaging::PixelFormat::Format24bppRgb);
+
+		System::Drawing::Rectangle rect = System::Drawing::Rectangle(0, 0, w, h);
+		System::Drawing::Imaging::BitmapData^ bmpData = bmp->LockBits(rect, System::Drawing::Imaging::ImageLockMode::WriteOnly, bmp->PixelFormat);
+
+		CopyToBuffer(bmpData->Scan0.ToPointer(), bmpData->Stride);
+
+		bmp->UnlockBits(bmpData);
+
+		// Clean up old image to prevent memory leaks
+		if (pictureBox1->Image) delete pictureBox1->Image;
+		pictureBox1->Image = bmp;
+	}
+
 	private: System::Void button1_Click(System::Object^ sender, System::EventArgs^ e) {
+		timer1->Stop(); // Stop video if running
 		OpenFileDialog^ ofd = gcnew OpenFileDialog();
 		ofd->Filter = "Image Files|*.jpg;*.png;*.jpeg";
 
 		if (ofd->ShowDialog() == System::Windows::Forms::DialogResult::OK) {
 			if (g_net == nullptr) {
-				MessageBox::Show("Warning: AI Model failed to load.\nSystem will display original image without detection.", "Warning", MessageBoxButtons::OK, MessageBoxIcon::Warning);
+				MessageBox::Show("Warning: AI Model failed to load.", "Warning", MessageBoxButtons::OK, MessageBoxIcon::Warning);
 			}
 
 			std::string fileName = msclr::interop::marshal_as<std::string>(ofd->FileName);
 
 			try {
 				ProcessGlobalImage(fileName);
+				UpdateDisplay();
 			}
 			catch (const std::exception& ex) {
 				MessageBox::Show("Error Processing: " + gcnew System::String(ex.what()));
-				return;
+			}
+		}
+	}
+
+	private: System::Void button2_Click(System::Object^ sender, System::EventArgs^ e) {
+		OpenFileDialog^ ofd = gcnew OpenFileDialog();
+		ofd->Filter = "Video Files|*.mp4;*.avi;*.mkv";
+
+		if (ofd->ShowDialog() == System::Windows::Forms::DialogResult::OK) {
+			if (g_net == nullptr) {
+				MessageBox::Show("Warning: AI Model failed to load.", "Warning", MessageBoxButtons::OK, MessageBoxIcon::Warning);
 			}
 
-			if (IsGlobalImageEmpty()) return;
+			std::string fileName = msclr::interop::marshal_as<std::string>(ofd->FileName);
 
-			// Create Bitmap (Safe Method: Copy Data with Stride handling)
-			int w = GetGlobalWidth();
-			int h = GetGlobalHeight();
-			Bitmap^ bmp = gcnew Bitmap(w, h, System::Drawing::Imaging::PixelFormat::Format24bppRgb);
-
-			System::Drawing::Rectangle rect = System::Drawing::Rectangle(0, 0, w, h);
-			System::Drawing::Imaging::BitmapData^ bmpData = bmp->LockBits(rect, System::Drawing::Imaging::ImageLockMode::WriteOnly, bmp->PixelFormat);
-
-			CopyToBuffer(bmpData->Scan0.ToPointer(), bmpData->Stride);
-
-			bmp->UnlockBits(bmpData);
-
-			pictureBox1->Image = bmp;
+			try {
+				OpenGlobalVideo(fileName);
+				timer1->Start();
+			}
+			catch (const std::exception& ex) {
+				MessageBox::Show("Error Opening Video: " + gcnew System::String(ex.what()));
+			}
 		}
+	}
+
+	private: System::Void timer1_Tick(System::Object^ sender, System::EventArgs^ e) {
+		if (!ProcessNextFrame()) {
+			timer1->Stop();
+			return;
+		}
+		UpdateDisplay();
 	}
 	};
 }
