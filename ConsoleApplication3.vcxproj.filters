@@ -32,6 +32,12 @@
     <ClInclude Include="UploadForm.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="CameraConnectionHelper.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="popup1.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AssemblyInfo.cpp">
@@ -46,10 +52,17 @@
     <ClCompile Include="main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="popup1.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Image Include="app.ico">
       <Filter>Resource Files</Filter>
     </Image>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="fix_uploadform.ps1" />
+    <None Include="IP_WEBCAM_FIX_GUIDE.md" />
   </ItemGroup>
 </Project>

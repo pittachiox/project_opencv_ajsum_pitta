@@ -3,6 +3,7 @@
 #include <opencv2/imgproc.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include "UploadForm.h"
+#include "popup1.h"
 
 namespace ConsoleApplication3 {
 
@@ -192,6 +193,7 @@ namespace ConsoleApplication3 {
 			this->button5->TabIndex = 8;
 			this->button5->Text = L"see camera";
 			this->button5->UseVisualStyleBackColor = false;
+			this->button5->Click += gcnew System::EventHandler(this, &MyForm::button5_Click);
 			// 
 			// button4
 			// 
@@ -318,6 +320,11 @@ namespace ConsoleApplication3 {
 	private: System::Void uploadToolStripMenuItem_Click(System::Object^ sender, System::EventArgs^ e) {
 		UploadForm^ form = gcnew UploadForm();
 		form->Show();
+	}
+
+	private: System::Void button5_Click(System::Object^ sender, System::EventArgs^ e) {
+		popup1^ form = gcnew popup1();
+		form->ShowDialog();
 	}
 
 	private: System::Void button4_Click(System::Object^ sender, System::EventArgs^ e) {

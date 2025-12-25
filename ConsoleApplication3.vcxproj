@@ -136,6 +136,9 @@
     <ClInclude Include="MyForm.h">
       <FileType>CppForm</FileType>
     </ClInclude>
+    <ClInclude Include="popup1.h">
+      <FileType>CppForm</FileType>
+    </ClInclude>
     <ClInclude Include="UploadForm.h">
       <FileType>CppForm</FileType>
     </ClInclude>
@@ -152,6 +155,7 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="popup1.cpp" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="app.ico" />
@@ -166,6 +170,9 @@
   <ItemGroup>
     <EmbeddedResource Include="MyForm.resx">
       <DependentUpon>MyForm.h</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="popup1.resx">
+      <DependentUpon>popup1.h</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="UploadForm.resx">
       <DependentUpon>UploadForm.h</DependentUpon>
