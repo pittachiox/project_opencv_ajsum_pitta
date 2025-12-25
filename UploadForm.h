@@ -471,7 +471,7 @@ namespace ConsoleApplication3 {
 
 	private: System::Void LoadModel_DoWork(System::Object^ sender, DoWorkEventArgs^ e) {
 		try {
-			std::string modelPath = "C:/Users/HP/source/repos/project_opencv_ajsum_fina/models/test/yolo11n.onnx";
+			std::string modelPath = "models/test/yolo11n.onnx";
 			InitGlobalModel(modelPath);
 			e->Result = true;
 		}
