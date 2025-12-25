@@ -64,6 +64,22 @@ static cv::Mat FormatToLetterbox(const cv::Mat& source, int width, int height, f
 	return result;
 }
 
+static void OpenGlobalCamera(int cameraIndex = 0) {
+	std::lock_guard<std::mutex> lock(g_frameMutex);
+	if (g_cap) { delete g_cap; g_cap = nullptr; }
+	g_cap = new cv::VideoCapture(cameraIndex);
+	g_currentFrameSeq = 0;
+	g_detectionSourceSeq = -1;
+}
+
+static void OpenGlobalCameraFromIP(const std::string& rtspUrl) {
+	std::lock_guard<std::mutex> lock(g_frameMutex);
+	if (g_cap) { delete g_cap; g_cap = nullptr; }
+	g_cap = new cv::VideoCapture(rtspUrl);
+	g_currentFrameSeq = 0;
+	g_detectionSourceSeq = -1;
+}
+
 static void InitGlobalModel(const std::string& modelPath) {
 	std::lock_guard<std::mutex> lock(g_processMutex);
 	g_modelReady = false;
@@ -352,12 +368,14 @@ namespace ConsoleApplication3 {
 			   // button3
 			   // 
 			   this->button3->BackColor = System::Drawing::Color::IndianRed;
+			   this->button3->Enabled = false;
 			   this->button3->Location = System::Drawing::Point(869, 31);
 			   this->button3->Name = L"button3";
 			   this->button3->Size = System::Drawing::Size(70, 29);
 			   this->button3->TabIndex = 3;
 			   this->button3->Text = L"live";
 			   this->button3->UseVisualStyleBackColor = false;
+			   this->button3->Click += gcnew System::EventHandler(this, &UploadForm::button3_Click);
 			   // 
 			   // UploadForm
 			   // 
@@ -476,7 +494,7 @@ namespace ConsoleApplication3 {
 	private: System::Void LoadModel_Completed(System::Object^ sender, RunWorkerCompletedEventArgs^ e) {
 		if (e->Result != nullptr && e->Result->GetType() == bool::typeid && safe_cast<bool>(e->Result)) {
 			this->Text = L"Upload Window - YOLO Detection (Ready)";
-			button1->Enabled = true; button2->Enabled = true;
+			button1->Enabled = true; button2->Enabled = true; button3->Enabled = true;
 			MessageBox::Show("Model loaded!", "Success", MessageBoxButtons::OK, MessageBoxIcon::Information);
 		}
 		else {
@@ -508,6 +526,214 @@ namespace ConsoleApplication3 {
 			std::string fileName = msclr::interop::marshal_as<std::string>(ofd->FileName);
 			OpenGlobalVideo(fileName);
 			if (g_cap && g_cap->isOpened()) StartProcessing();
+		}
+	}
+
+	private: System::Void button3_Click(System::Object^ sender, System::EventArgs^ e) {
+		StopProcessing();
+		
+		// Create popup form for IP and Port input
+		Form^ ipForm = gcnew Form();
+		ipForm->Text = L"Connect to Mobile Camera";
+		ipForm->Size = System::Drawing::Size(450, 320);
+		ipForm->StartPosition = FormStartPosition::CenterParent;
+		ipForm->FormBorderStyle = System::Windows::Forms::FormBorderStyle::FixedDialog;
+		ipForm->MaximizeBox = false;
+		ipForm->MinimizeBox = false;
+
+		Label^ labelTitle = gcnew Label();
+		labelTitle->Text = L"Enter Mobile Phone IP Address and Port";
+		labelTitle->Location = System::Drawing::Point(20, 20);
+		labelTitle->Size = System::Drawing::Size(400, 25);
+		labelTitle->Font = gcnew System::Drawing::Font(L"Segoe UI", 10, FontStyle::Bold);
+
+		Label^ labelIP = gcnew Label();
+		labelIP->Text = L"IP Address:";
+		labelIP->Location = System::Drawing::Point(20, 60);
+		labelIP->Size = System::Drawing::Size(100, 20);
+
+		TextBox^ textBoxIP = gcnew TextBox();
+		textBoxIP->Location = System::Drawing::Point(120, 58);
+		textBoxIP->Size = System::Drawing::Size(290, 25);
+		textBoxIP->Text = L"192.168.1.100";
+
+		Label^ labelPort = gcnew Label();
+		labelPort->Text = L"Port:";
+		labelPort->Location = System::Drawing::Point(20, 95);
+		labelPort->Size = System::Drawing::Size(100, 20);
+
+		TextBox^ textBoxPort = gcnew TextBox();
+		textBoxPort->Location = System::Drawing::Point(120, 93);
+		textBoxPort->Size = System::Drawing::Size(290, 25);
+		textBoxPort->Text = L"8080";
+
+		Label^ labelPath = gcnew Label();
+		labelPath->Text = L"Path:";
+		labelPath->Location = System::Drawing::Point(20, 130);
+		labelPath->Size = System::Drawing::Size(100, 20);
+
+		TextBox^ textBoxPath = gcnew TextBox();
+		textBoxPath->Location = System::Drawing::Point(120, 128);
+		textBoxPath->Size = System::Drawing::Size(290, 25);
+		textBoxPath->Text = L"/video";
+
+		Label^ labelExample = gcnew Label();
+		labelExample->Text = L"Example apps: IP Webcam, DroidCam, or iVCam\nMake sure both devices are on the same WiFi network";
+		labelExample->Location = System::Drawing::Point(20, 165);
+		labelExample->Size = System::Drawing::Size(400, 35);
+		labelExample->Font = gcnew System::Drawing::Font(L"Segoe UI", 8, FontStyle::Italic);
+		labelExample->ForeColor = System::Drawing::Color::Gray;
+
+		Button^ btnConnect = gcnew Button();
+		btnConnect->Text = L"Connect";
+		btnConnect->Location = System::Drawing::Point(120, 215);
+		btnConnect->Size = System::Drawing::Size(100, 35);
+		btnConnect->BackColor = System::Drawing::Color::FromArgb(40, 167, 69);
+		btnConnect->ForeColor = System::Drawing::Color::White;
+		btnConnect->FlatStyle = FlatStyle::Flat;
+		btnConnect->DialogResult = System::Windows::Forms::DialogResult::OK;
+
+		Button^ btnCancel = gcnew Button();
+		btnCancel->Text = L"Cancel";
+		btnCancel->Location = System::Drawing::Point(230, 215);
+		btnCancel->Size = System::Drawing::Size(100, 35);
+		btnCancel->BackColor = System::Drawing::Color::FromArgb(220, 53, 69);
+		btnCancel->ForeColor = System::Drawing::Color::White;
+		btnCancel->FlatStyle = FlatStyle::Flat;
+		btnCancel->DialogResult = System::Windows::Forms::DialogResult::Cancel;
+
+		ipForm->Controls->Add(labelTitle);
+		ipForm->Controls->Add(labelIP);
+		ipForm->Controls->Add(textBoxIP);
+		ipForm->Controls->Add(labelPort);
+		ipForm->Controls->Add(textBoxPort);
+		ipForm->Controls->Add(labelPath);
+		ipForm->Controls->Add(textBoxPath);
+		ipForm->Controls->Add(labelExample);
+		ipForm->Controls->Add(btnConnect);
+		ipForm->Controls->Add(btnCancel);
+		ipForm->AcceptButton = btnConnect;
+		ipForm->CancelButton = btnCancel;
+
+		if (ipForm->ShowDialog() == System::Windows::Forms::DialogResult::OK) {
+			String^ ip = textBoxIP->Text->Trim();
+			String^ port = textBoxPort->Text->Trim();
+			String^ path = textBoxPath->Text->Trim();
+
+			if (String::IsNullOrEmpty(ip) || String::IsNullOrEmpty(port)) {
+				MessageBox::Show(
+					"Please enter both IP Address and Port",
+					"Input Required",
+					MessageBoxButtons::OK,
+					MessageBoxIcon::Warning
+				);
+				return;
+			}
+
+			// Ensure path starts with /
+			if (!path->StartsWith("/")) {
+				path = "/" + path;
+			}
+
+			try {
+				// Try multiple URL formats
+				array<String^>^ urlFormats = gcnew array<String^> {
+					String::Format("http://{0}:{1}{2}", ip, port, path),
+					String::Format("http://{0}:{1}/videofeed", ip, port),
+					String::Format("http://{0}:{1}/video", ip, port),
+					String::Format("rtsp://{0}:{1}", ip, port)
+				};
+
+				this->Text = L"Upload Window - Connecting to camera...";
+				Application::DoEvents();
+
+				bool connected = false;
+				String^ successUrl = "";
+
+				for each (String^ streamUrl in urlFormats) {
+					std::string url = msclr::interop::marshal_as<std::string>(streamUrl);
+					
+					OutputDebugStringA(("[INFO] Trying to connect: " + url + "\n").c_str());
+					
+					OpenGlobalCameraFromIP(url);
+					Threading::Thread::Sleep(1000); // Wait longer for connection
+
+					if (g_cap && g_cap->isOpened()) {
+						// Try to read a test frame
+						cv::Mat testFrame;
+						bool canRead = false;
+						{
+							std::lock_guard<std::mutex> lock(g_frameMutex);
+							if (g_cap->read(testFrame)) {
+								canRead = !testFrame.empty();
+							}
+						}
+
+						if (canRead) {
+							connected = true;
+							successUrl = streamUrl;
+							OutputDebugStringA("[SUCCESS] Connected successfully!\n");
+							break;
+						}
+					}
+					
+					// Close failed connection
+					{
+						std::lock_guard<std::mutex> lock(g_frameMutex);
+						if (g_cap) {
+							delete g_cap;
+							g_cap = nullptr;
+						}
+					}
+				}
+
+				if (connected) {
+					StartProcessing();
+					this->Text = L"Upload Window - Live Camera Connected";
+					MessageBox::Show(
+						"Successfully connected to mobile camera!\n\n" +
+						"Stream URL: " + successUrl + "\n\n" +
+						"Press OK to start detection.",
+						"Connection Successful",
+						MessageBoxButtons::OK,
+						MessageBoxIcon::Information
+					);
+				}
+				else {
+					this->Text = L"Upload Window - Connection Failed";
+					
+					String^ errorMsg = "Failed to connect to mobile camera!\n\n";
+					errorMsg += "Troubleshooting Steps:\n";
+					errorMsg += "1. Verify IP Address: " + ip + "\n";
+					errorMsg += "2. Verify Port: " + port + "\n";
+					errorMsg += "3. Check if camera app is running on mobile\n";
+					errorMsg += "4. Ensure both devices are on the same WiFi network\n";
+					errorMsg += "5. Check firewall settings\n";
+					errorMsg += "6. Try disabling antivirus temporarily\n\n";
+					errorMsg += "Attempted URLs:\n";
+					for each (String^ url in urlFormats) {
+						errorMsg += "  - " + url + "\n";
+					}
+					
+					MessageBox::Show(
+						errorMsg,
+						"Connection Error",
+						MessageBoxButtons::OK,
+						MessageBoxIcon::Error
+					);
+				}
+			}
+			catch (Exception^ ex) {
+				this->Text = L"Upload Window - Error Occurred";
+				MessageBox::Show(
+					"An error occurred while connecting:\n\n" + 
+					ex->Message + "\n\n" +
+					"Stack Trace:\n" + ex->StackTrace,
+					"Exception Error",
+					MessageBoxButtons::OK,
+					MessageBoxIcon::Error
+				);
+			}
 		}
 	}
 
