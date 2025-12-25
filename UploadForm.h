@@ -71,42 +71,11 @@ static void InitGlobalModel(const std::string& modelPath) {
 
 	try {
 		g_net = new cv::dnn::Net(cv::dnn::readNetFromONNX(modelPath));
-		
-		// --- พยายามใช้ CUDA ก่อน ---
-		bool cudaSuccess = false;
-		try {
-			g_net->setPreferableBackend(cv::dnn::DNN_BACKEND_CUDA);
-			g_net->setPreferableTarget(cv::dnn::DNN_TARGET_CUDA);
 
-			// ทดสอบรัน Dummy Forward Pass เพื่อตรวจสอบว่า CUDA ใช้งานได้จริง
-			cv::Mat dummyInput = cv::Mat::zeros(640, 640, CV_8UC3);
-			cv::Mat blob;
-			cv::dnn::blobFromImage(dummyInput, blob, 1.0 / 255.0, cv::Size(640, 640), cv::Scalar(), true, false);
-			g_net->setInput(blob);
-			std::vector<cv::Mat> dummyOutputs;
-			g_net->forward(dummyOutputs, g_net->getUnconnectedOutLayersNames());
-
-			// ถ้าถึงตรงนี้แสดงว่า CUDA ใช้งานได้
-			cudaSuccess = true;
-			OutputDebugStringA("[INFO] Using GPU (CUDA) for inference\n");
-		}
-		catch (const cv::Exception& e) {
-			// CUDA ล้มเหลว ให้ fallback ไปใช้ CPU
-			OutputDebugStringA("[WARNING] CUDA initialization failed, falling back to CPU\n");
-			OutputDebugStringA(("Error: " + std::string(e.what()) + "\n").c_str());
-			cudaSuccess = false;
-		}
-		catch (...) {
-			OutputDebugStringA("[WARNING] CUDA initialization failed (unknown error), falling back to CPU\n");
-			cudaSuccess = false;
-		}
-
-		// --- ถ้า CUDA ไม่สำเร็จ ให้ใช้ CPU ---
-		if (!cudaSuccess) {
-			g_net->setPreferableBackend(cv::dnn::DNN_BACKEND_OPENCV);
-			g_net->setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
-			OutputDebugStringA("[INFO] Using CPU for inference\n");
-		}
+		// ใช้ CPU เท่านั้น
+		g_net->setPreferableBackend(cv::dnn::DNN_BACKEND_OPENCV);
+		g_net->setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
+		OutputDebugStringA("[INFO] Using CPU for inference\n");
 
 		g_classes = {
 			"person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat", "traffic light",
