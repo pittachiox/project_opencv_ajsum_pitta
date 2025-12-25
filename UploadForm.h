@@ -292,6 +292,7 @@ namespace ConsoleApplication3 {
 	private: Bitmap^ currentFrame;
 	private: Object^ bufferLock;
 	private: bool isProcessing;
+	private: System::Windows::Forms::Button^ button3;
 	private: bool shouldStop;
 
 #pragma region Windows Form Designer generated code
@@ -303,9 +304,13 @@ namespace ConsoleApplication3 {
 			   this->timer1 = (gcnew System::Windows::Forms::Timer(this->components));
 			   this->pictureBox1 = (gcnew System::Windows::Forms::PictureBox());
 			   this->processingWorker = (gcnew System::ComponentModel::BackgroundWorker());
+			   this->button3 = (gcnew System::Windows::Forms::Button());
 			   (cli::safe_cast<System::ComponentModel::ISupportInitialize^>(this->pictureBox1))->BeginInit();
 			   this->SuspendLayout();
-
+			   // 
+			   // button1
+			   // 
+			   this->button1->Enabled = false;
 			   this->button1->Location = System::Drawing::Point(1155, 280);
 			   this->button1->Name = L"button1";
 			   this->button1->Size = System::Drawing::Size(100, 25);
@@ -313,8 +318,10 @@ namespace ConsoleApplication3 {
 			   this->button1->Text = L"Upload Image";
 			   this->button1->UseVisualStyleBackColor = true;
 			   this->button1->Click += gcnew System::EventHandler(this, &UploadForm::button1_Click);
-			   this->button1->Enabled = false;
-
+			   // 
+			   // button2
+			   // 
+			   this->button2->Enabled = false;
 			   this->button2->Location = System::Drawing::Point(1271, 280);
 			   this->button2->Name = L"button2";
 			   this->button2->Size = System::Drawing::Size(100, 25);
@@ -322,24 +329,42 @@ namespace ConsoleApplication3 {
 			   this->button2->Text = L"Upload Video";
 			   this->button2->UseVisualStyleBackColor = true;
 			   this->button2->Click += gcnew System::EventHandler(this, &UploadForm::button2_Click);
-			   this->button2->Enabled = false;
-
+			   // 
+			   // timer1
+			   // 
 			   this->timer1->Interval = 30;
 			   this->timer1->Tick += gcnew System::EventHandler(this, &UploadForm::timer1_Tick);
-
+			   // 
+			   // pictureBox1
+			   // 
 			   this->pictureBox1->Location = System::Drawing::Point(16, 20);
 			   this->pictureBox1->Name = L"pictureBox1";
 			   this->pictureBox1->Size = System::Drawing::Size(937, 300);
 			   this->pictureBox1->SizeMode = System::Windows::Forms::PictureBoxSizeMode::Zoom;
 			   this->pictureBox1->TabIndex = 1;
 			   this->pictureBox1->TabStop = false;
-
+			   // 
+			   // processingWorker
+			   // 
 			   this->processingWorker->WorkerSupportsCancellation = true;
 			   this->processingWorker->DoWork += gcnew System::ComponentModel::DoWorkEventHandler(this, &UploadForm::processingWorker_DoWork);
-
+			   // 
+			   // button3
+			   // 
+			   this->button3->BackColor = System::Drawing::Color::IndianRed;
+			   this->button3->Location = System::Drawing::Point(869, 31);
+			   this->button3->Name = L"button3";
+			   this->button3->Size = System::Drawing::Size(70, 29);
+			   this->button3->TabIndex = 3;
+			   this->button3->Text = L"live";
+			   this->button3->UseVisualStyleBackColor = false;
+			   // 
+			   // UploadForm
+			   // 
 			   this->AutoScaleDimensions = System::Drawing::SizeF(6, 13);
 			   this->AutoScaleMode = System::Windows::Forms::AutoScaleMode::Font;
 			   this->ClientSize = System::Drawing::Size(1422, 332);
+			   this->Controls->Add(this->button3);
 			   this->Controls->Add(this->pictureBox1);
 			   this->Controls->Add(this->button1);
 			   this->Controls->Add(this->button2);
@@ -348,6 +373,7 @@ namespace ConsoleApplication3 {
 			   this->FormClosing += gcnew System::Windows::Forms::FormClosingEventHandler(this, &UploadForm::UploadForm_FormClosing);
 			   (cli::safe_cast<System::ComponentModel::ISupportInitialize^>(this->pictureBox1))->EndInit();
 			   this->ResumeLayout(false);
+
 		   }
 #pragma endregion
 
