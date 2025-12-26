@@ -70,6 +70,9 @@
     <ClCompile Include="offline1.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="ParkingSetupForm.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Image Include="app.ico">

@@ -140,7 +140,9 @@
     <ClInclude Include="offline1.h">
       <FileType>CppForm</FileType>
     </ClInclude>
-    <ClInclude Include="ParkingSetupForm.h" />
+    <ClInclude Include="ParkingSetupForm.h">
+      <FileType>CppForm</FileType>
+    </ClInclude>
     <ClInclude Include="ParkingSlot.h" />
     <ClInclude Include="popup1.h">
       <FileType>CppForm</FileType>
@@ -155,6 +157,7 @@
     <ClCompile Include="AssemblyInfo.cpp" />
     <ClCompile Include="MyForm.cpp" />
     <ClCompile Include="offline1.cpp" />
+    <ClCompile Include="ParkingSetupForm.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
@@ -180,6 +183,9 @@
     </EmbeddedResource>
     <EmbeddedResource Include="offline1.resx">
       <DependentUpon>offline1.h</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="ParkingSetupForm.resx">
+      <DependentUpon>ParkingSetupForm.h</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="popup1.resx">
       <DependentUpon>popup1.h</DependentUpon>

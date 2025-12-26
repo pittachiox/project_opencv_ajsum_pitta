@@ -39,6 +39,12 @@ struct ParkingSlot {
         return cv::Point(static_cast<int>(m.m10 / m.m00), static_cast<int>(m.m01 / m.m00));
     }
     
+    // Get top-right point of bounding box
+    cv::Point getTopRight() const {
+        cv::Rect bbox = getBoundingBox();
+        return cv::Point(bbox.x + bbox.width, bbox.y);
+    }
+    
     // Calculate polygon area
     double getArea() const {
         if (polygon.size() < 3) return 0.0;
