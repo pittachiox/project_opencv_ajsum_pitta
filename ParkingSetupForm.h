@@ -190,7 +190,6 @@ namespace ConsoleApplication3 {
 			   this->panelStats->Name = L"panelStats";
 			   this->panelStats->Size = System::Drawing::Size(280, 32);
 			   this->panelStats->TabIndex = 13;
-
 			   // 
 			   // btnDeleteSlot
 			   // 
@@ -567,7 +566,7 @@ namespace ConsoleApplication3 {
 
 		// Draw current polygon being drawn
 		if (currentPolygon->size() > 0) {
-			for (size_t i = 0; i < currentPolygon->size(); i++) {
+		for (size_t i = 0; i < currentPolygon->size(); i++) {
 				cv::circle(display, (*currentPolygon)[i], 5, cv::Scalar(0, 0, 255), -1);
 				if (i > 0) {
 					cv::line(display, (*currentPolygon)[i - 1], (*currentPolygon)[i], cv::Scalar(255, 0, 0), 2);
@@ -682,7 +681,7 @@ namespace ConsoleApplication3 {
 		TextBox^ txtPath = gcnew TextBox();
 		txtPath->Text = "/video";
 		txtPath->Location = System::Drawing::Point(180, 135);
-		txtPath->Size = System::Drawing::Size(320, 25);
+	 txtPath->Size = System::Drawing::Size(320, 25);
 		inputForm->Controls->Add(txtPath);
 
 		// Example/Help Text

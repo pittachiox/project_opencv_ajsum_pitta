@@ -485,7 +485,7 @@ namespace ConsoleApplication3 {
 	private: System::Windows::Forms::Button^ btnLiveCamera;
 	private: System::Windows::Forms::Button^ btnLoadParkingTemplate;
 	private: System::Windows::Forms::CheckBox^ chkParkingMode;
-	private: System::Windows::Forms::Panel^ panel3;
+
 	private: System::Windows::Forms::Label^ lblLogs;
 	private: bool shouldStop;
 	private: long long lastProcessedSeq = -1;
@@ -513,7 +513,6 @@ namespace ConsoleApplication3 {
 			   this->chkParkingMode = (gcnew System::Windows::Forms::CheckBox());
 			   this->btnLoadParkingTemplate = (gcnew System::Windows::Forms::Button());
 			   this->lblLogs = (gcnew System::Windows::Forms::Label());
-			   this->panel3 = (gcnew System::Windows::Forms::Panel());
 			   this->lblViolation = (gcnew System::Windows::Forms::Label());
 			   this->lblNormal = (gcnew System::Windows::Forms::Label());
 			   this->lblEmpty = (gcnew System::Windows::Forms::Label());
@@ -574,6 +573,8 @@ namespace ConsoleApplication3 {
 			   // 
 			   this->btnOnlineMode->BackColor = System::Drawing::Color::FromArgb(static_cast<System::Int32>(static_cast<System::Byte>(40)), static_cast<System::Int32>(static_cast<System::Byte>(167)),
 				   static_cast<System::Int32>(static_cast<System::Byte>(69)));
+			   this->btnOnlineMode->Font = (gcnew System::Drawing::Font(L"Microsoft Sans Serif", 12, System::Drawing::FontStyle::Bold, System::Drawing::GraphicsUnit::Point,
+				   static_cast<System::Byte>(0)));
 			   this->btnOnlineMode->ForeColor = System::Drawing::SystemColors::ButtonHighlight;
 			   this->btnOnlineMode->Location = System::Drawing::Point(851, 46);
 			   this->btnOnlineMode->Name = L"btnOnlineMode";
@@ -584,11 +585,13 @@ namespace ConsoleApplication3 {
 			   // 
 			   // btnPlayPause
 			   // 
+			   this->btnPlayPause->BackColor = System::Drawing::Color::Gold;
 			   this->btnPlayPause->Location = System::Drawing::Point(554, 47);
 			   this->btnPlayPause->Name = L"btnPlayPause";
 			   this->btnPlayPause->Size = System::Drawing::Size(45, 44);
 			   this->btnPlayPause->TabIndex = 3;
 			   this->btnPlayPause->Text = L"▶";
+			   this->btnPlayPause->UseVisualStyleBackColor = false;
 			   this->btnPlayPause->Click += gcnew System::EventHandler(this, &UploadForm::btnPlayPause_Click);
 			   // 
 			   // trackBar1
@@ -633,7 +636,7 @@ namespace ConsoleApplication3 {
 			   // btnLoadParkingTemplate
 			   // 
 			   this->btnLoadParkingTemplate->BackColor = System::Drawing::Color::LightGreen;
-			   this->btnLoadParkingTemplate->Location = System::Drawing::Point(177, 334);
+			   this->btnLoadParkingTemplate->Location = System::Drawing::Point(297, 88);
 			   this->btnLoadParkingTemplate->Name = L"btnLoadParkingTemplate";
 			   this->btnLoadParkingTemplate->Size = System::Drawing::Size(100, 25);
 			   this->btnLoadParkingTemplate->TabIndex = 7;
@@ -650,14 +653,6 @@ namespace ConsoleApplication3 {
 			   this->lblLogs->Size = System::Drawing::Size(163, 31);
 			   this->lblLogs->TabIndex = 0;
 			   this->lblLogs->Text = L"logs 25/12/67";
-			   // 
-			   // panel3
-			   // 
-			   this->panel3->BackColor = System::Drawing::Color::LemonChiffon;
-			   this->panel3->Location = System::Drawing::Point(42, 229);
-			   this->panel3->Name = L"panel3";
-			   this->panel3->Size = System::Drawing::Size(346, 38);
-			   this->panel3->TabIndex = 1;
 			   // 
 			   // lblViolation
 			   // 
@@ -704,8 +699,9 @@ namespace ConsoleApplication3 {
 			   // 
 			   // btnLiveCamera
 			   // 
-			   this->btnLiveCamera->BackColor = System::Drawing::Color::FromArgb(static_cast<System::Int32>(static_cast<System::Byte>(40)), static_cast<System::Int32>(static_cast<System::Byte>(167)),
-				   static_cast<System::Int32>(static_cast<System::Byte>(69)));
+			   this->btnLiveCamera->BackColor = System::Drawing::Color::Tomato;
+			   this->btnLiveCamera->Font = (gcnew System::Drawing::Font(L"Microsoft Sans Serif", 11.25F, System::Drawing::FontStyle::Bold, System::Drawing::GraphicsUnit::Point,
+				   static_cast<System::Byte>(0)));
 			   this->btnLiveCamera->ForeColor = System::Drawing::SystemColors::ButtonHighlight;
 			   this->btnLiveCamera->Location = System::Drawing::Point(14, 25);
 			   this->btnLiveCamera->Name = L"btnLiveCamera";
@@ -743,7 +739,6 @@ namespace ConsoleApplication3 {
 			   this->splitContainer1->Panel2->Controls->Add(this->chkParkingMode);
 			   this->splitContainer1->Panel2->Controls->Add(this->btnLiveCamera);
 			   this->splitContainer1->Panel2->Controls->Add(this->lblLogs);
-			   this->splitContainer1->Panel2->Controls->Add(this->panel3);
 			   this->splitContainer1->Size = System::Drawing::Size(1443, 759);
 			   this->splitContainer1->SplitterDistance = 1009;
 			   this->splitContainer1->TabIndex = 5;

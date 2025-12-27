@@ -124,12 +124,15 @@
     <value>105, 17</value>
   </metadata>
   <assembly alias="System.Drawing" name="System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a" />
-  <data name="btnPlayPause.Image" type="System.Drawing.Bitmap, System.Drawing" mimetype="application/x-microsoft.net.object.bytearray.base64">
+  <data name="btnUploadImage.Image" type="System.Drawing.Bitmap, System.Drawing" mimetype="application/x-microsoft.net.object.bytearray.base64">
     <value>
         iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABGdBTUEAALGPC/xhBQAAACBjSFJNAAB6
-        JgAAgIQAAPoAAACA6AAAdTAAAOpgAAA6mAAAF3CculE8AAAACXBIWXMAAA7DAAAOwwHHb6hkAAAASUlE
-        QVQ4T92SMQ0AMAzDSiX8QQxNcWxPP8vqP0t5LJ+p+oskneTOevNggjO7mwcWmgcWmgcWmgcWmgcWmgcW
-        mgcWmgd2GPOf8ACDymXRJJyuAwAAAABJRU5ErkJggg==
+        JgAAgIQAAPoAAACA6AAAdTAAAOpgAAA6mAAAF3CculE8AAAACXBIWXMAAA7DAAAOwwHHb6hkAAAA5ElE
+        QVQ4T2NgoDaQl5d3UFBQ+KioqPgfGYPEQHLo6hkUFRUfoCn8JCcnFywnJyeJhoNBcmgGPwAZ8B+LYqIw
+        SC/cAMaU0D0wCX5vR2PGpJCtDGnhX0CYMTlkB0+Aiw1eA5A1M6RFvGJOCu7nDvR0BWHmxOAJIDGQHEED
+        QDaDNPC72hsgY5AYY3LoZoIGgJwMshXdAJAYQ2r4Z8oMSAsHxRB+A0ABhtULCUETGZNCNhE0ABTa4EBM
+        DJ6AGojhL/ndnYwIGgDC4GhMDt0M8jMIg2xG14zXAGIxzACUpEwifoCeNegPAPfbtDkuVHCAAAAAAElF
+        TkSuQmCC
 </value>
   </data>
 </root>

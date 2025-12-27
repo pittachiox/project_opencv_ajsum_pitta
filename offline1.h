@@ -435,7 +435,7 @@ namespace ConsoleApplication3 {
 	private: System::Windows::Forms::Button^ btnUploadVideo;
 	private: System::Windows::Forms::Button^ btnLoadParkingTemplate;
 	private: System::Windows::Forms::CheckBox^ chkParkingMode;
-	private: System::Windows::Forms::Panel^ panel3;
+
 	private: System::Windows::Forms::Label^ lblLogs;
 	private: bool shouldStop;
 	private: long long lastProcessedSeq = -1;
@@ -443,9 +443,9 @@ namespace ConsoleApplication3 {
 	private: System::Windows::Forms::PictureBox^ pictureBox1;
 	private: System::Windows::Forms::Panel^ panel1;
 	private: System::Windows::Forms::Label^ label1;
-	private: System::Windows::Forms::Label^ label4;
-	private: System::Windows::Forms::Label^ label3;
-	private: System::Windows::Forms::Label^ label2;
+
+
+
 
 
 	private: long long lastDisplaySeq = -1;
@@ -488,7 +488,6 @@ namespace ConsoleApplication3 {
 			   this->btnPlayPause = (gcnew System::Windows::Forms::Button());
 			   this->trackBar1 = (gcnew System::Windows::Forms::TrackBar());
 			   this->lblLogs = (gcnew System::Windows::Forms::Label());
-			   this->panel3 = (gcnew System::Windows::Forms::Panel());
 			   this->btnUploadImage = (gcnew System::Windows::Forms::Button());
 			   this->btnUploadVideo = (gcnew System::Windows::Forms::Button());
 			   this->btnLoadParkingTemplate = (gcnew System::Windows::Forms::Button());
@@ -499,9 +498,6 @@ namespace ConsoleApplication3 {
 			   this->label7 = (gcnew System::Windows::Forms::Label());
 			   this->label6 = (gcnew System::Windows::Forms::Label());
 			   this->label5 = (gcnew System::Windows::Forms::Label());
-			   this->label4 = (gcnew System::Windows::Forms::Label());
-			   this->label3 = (gcnew System::Windows::Forms::Label());
-			   this->label2 = (gcnew System::Windows::Forms::Label());
 			   this->pnlViolationContainer = (gcnew System::Windows::Forms::Panel());
 			   this->flpViolations = (gcnew System::Windows::Forms::FlowLayoutPanel());
 			   this->btnClearViolations = (gcnew System::Windows::Forms::Button());
@@ -549,8 +545,9 @@ namespace ConsoleApplication3 {
 			   // 
 			   // btnOfflineMode
 			   // 
-			   this->btnOfflineMode->BackColor = System::Drawing::Color::FromArgb(static_cast<System::Int32>(static_cast<System::Byte>(255)), static_cast<System::Int32>(static_cast<System::Byte>(128)),
-				   static_cast<System::Int32>(static_cast<System::Byte>(128)));
+			   this->btnOfflineMode->BackColor = System::Drawing::Color::OrangeRed;
+			   this->btnOfflineMode->Font = (gcnew System::Drawing::Font(L"Microsoft Sans Serif", 12, System::Drawing::FontStyle::Bold, System::Drawing::GraphicsUnit::Point,
+				   static_cast<System::Byte>(0)));
 			   this->btnOfflineMode->ForeColor = System::Drawing::SystemColors::ButtonHighlight;
 			   this->btnOfflineMode->Location = System::Drawing::Point(851, 46);
 			   this->btnOfflineMode->Name = L"btnOfflineMode";
@@ -561,12 +558,14 @@ namespace ConsoleApplication3 {
 			   // 
 			   // btnPlayPause
 			   // 
-	   this->btnPlayPause->Location = System::Drawing::Point(554, 47);
-	   this->btnPlayPause->Name = L"btnPlayPause";
-	   this->btnPlayPause->Size = System::Drawing::Size(45, 44);
-	   this->btnPlayPause->TabIndex = 3;
-	   this->btnPlayPause->Text = L"▶";
-	   this->btnPlayPause->Click += gcnew System::EventHandler(this, &OfflineUploadForm::btnPlayPause_Click);
+			   this->btnPlayPause->BackColor = System::Drawing::Color::Gold;
+			   this->btnPlayPause->Location = System::Drawing::Point(554, 47);
+			   this->btnPlayPause->Name = L"btnPlayPause";
+			   this->btnPlayPause->Size = System::Drawing::Size(45, 44);
+			   this->btnPlayPause->TabIndex = 3;
+			   this->btnPlayPause->Text = L"▶";
+			   this->btnPlayPause->UseVisualStyleBackColor = false;
+			   this->btnPlayPause->Click += gcnew System::EventHandler(this, &OfflineUploadForm::btnPlayPause_Click);
 			   // 
 			   // trackBar1
 			   // 
@@ -588,21 +587,15 @@ namespace ConsoleApplication3 {
 			   this->lblLogs->TabIndex = 0;
 			   this->lblLogs->Text = L"logs 25/12/67";
 			   // 
-			   // panel3
-			   // 
-			   this->panel3->BackColor = System::Drawing::Color::LemonChiffon;
-			   this->panel3->Location = System::Drawing::Point(42, 229);
-			   this->panel3->Name = L"panel3";
-			   this->panel3->Size = System::Drawing::Size(346, 38);
-			   this->panel3->TabIndex = 1;
-			   // 
 			   // btnUploadImage
 			   // 
 			   this->btnUploadImage->BackColor = System::Drawing::Color::FromArgb(static_cast<System::Int32>(static_cast<System::Byte>(255)), static_cast<System::Int32>(static_cast<System::Byte>(255)),
 				   static_cast<System::Int32>(static_cast<System::Byte>(192)));
-			   this->btnUploadImage->Location = System::Drawing::Point(12, 25);
+			   this->btnUploadImage->Font = (gcnew System::Drawing::Font(L"Microsoft Sans Serif", 12, System::Drawing::FontStyle::Bold, System::Drawing::GraphicsUnit::Point,
+				   static_cast<System::Byte>(0)));
+			   this->btnUploadImage->Location = System::Drawing::Point(77, 149);
 			   this->btnUploadImage->Name = L"btnUploadImage";
-			   this->btnUploadImage->Size = System::Drawing::Size(100, 25);
+			   this->btnUploadImage->Size = System::Drawing::Size(135, 44);
 			   this->btnUploadImage->TabIndex = 5;
 			   this->btnUploadImage->Text = L"Upload Image";
 			   this->btnUploadImage->UseVisualStyleBackColor = false;
@@ -612,9 +605,11 @@ namespace ConsoleApplication3 {
 			   // 
 			   this->btnUploadVideo->BackColor = System::Drawing::Color::FromArgb(static_cast<System::Int32>(static_cast<System::Byte>(255)), static_cast<System::Int32>(static_cast<System::Byte>(255)),
 				   static_cast<System::Int32>(static_cast<System::Byte>(192)));
-			   this->btnUploadVideo->Location = System::Drawing::Point(12, 56);
+			   this->btnUploadVideo->Font = (gcnew System::Drawing::Font(L"Microsoft Sans Serif", 12, System::Drawing::FontStyle::Bold, System::Drawing::GraphicsUnit::Point,
+				   static_cast<System::Byte>(0)));
+			   this->btnUploadVideo->Location = System::Drawing::Point(228, 150);
 			   this->btnUploadVideo->Name = L"btnUploadVideo";
-			   this->btnUploadVideo->Size = System::Drawing::Size(100, 25);
+			   this->btnUploadVideo->Size = System::Drawing::Size(135, 43);
 			   this->btnUploadVideo->TabIndex = 6;
 			   this->btnUploadVideo->Text = L"Upload Video";
 			   this->btnUploadVideo->UseVisualStyleBackColor = false;
@@ -623,7 +618,7 @@ namespace ConsoleApplication3 {
 			   // btnLoadParkingTemplate
 			   // 
 			   this->btnLoadParkingTemplate->BackColor = System::Drawing::Color::LightGreen;
-			   this->btnLoadParkingTemplate->Location = System::Drawing::Point(177, 334);
+			   this->btnLoadParkingTemplate->Location = System::Drawing::Point(318, 88);
 			   this->btnLoadParkingTemplate->Name = L"btnLoadParkingTemplate";
 			   this->btnLoadParkingTemplate->Size = System::Drawing::Size(100, 25);
 			   this->btnLoadParkingTemplate->TabIndex = 7;
@@ -665,16 +660,12 @@ namespace ConsoleApplication3 {
 			   this->splitContainer1->Panel2->Controls->Add(this->label7);
 			   this->splitContainer1->Panel2->Controls->Add(this->label6);
 			   this->splitContainer1->Panel2->Controls->Add(this->label5);
-			   this->splitContainer1->Panel2->Controls->Add(this->label4);
-			   this->splitContainer1->Panel2->Controls->Add(this->label3);
-			   this->splitContainer1->Panel2->Controls->Add(this->label2);
 			   this->splitContainer1->Panel2->Controls->Add(this->btnLoadParkingTemplate);
 			   this->splitContainer1->Panel2->Controls->Add(this->chkParkingMode);
+			   this->splitContainer1->Panel2->Controls->Add(this->pnlViolationContainer);
 			   this->splitContainer1->Panel2->Controls->Add(this->btnUploadVideo);
 			   this->splitContainer1->Panel2->Controls->Add(this->btnUploadImage);
 			   this->splitContainer1->Panel2->Controls->Add(this->lblLogs);
-			   this->splitContainer1->Panel2->Controls->Add(this->panel3);
-			   this->splitContainer1->Panel2->Controls->Add(this->pnlViolationContainer);
 			   this->splitContainer1->Size = System::Drawing::Size(1443, 759);
 			   this->splitContainer1->SplitterDistance = 1009;
 			   this->splitContainer1->TabIndex = 5;
@@ -706,73 +697,43 @@ namespace ConsoleApplication3 {
 			   // 
 			   // label7
 			   // 
-			   this->label7->AutoSize = true;
-			   this->label7->Location = System::Drawing::Point(284, 125);
+			   this->label7->BackColor = System::Drawing::Color::FromArgb(static_cast<System::Int32>(static_cast<System::Byte>(244)), static_cast<System::Int32>(static_cast<System::Byte>(67)),
+				   static_cast<System::Int32>(static_cast<System::Byte>(54)));
+			   this->label7->Font = (gcnew System::Drawing::Font(L"Arial", 26, System::Drawing::FontStyle::Bold));
+			   this->label7->ForeColor = System::Drawing::Color::White;
+			   this->label7->Location = System::Drawing::Point(60, 369);
 			   this->label7->Name = L"label7";
-			   this->label7->Size = System::Drawing::Size(85, 13);
+			   this->label7->Size = System::Drawing::Size(320, 50);
 			   this->label7->TabIndex = 16;
-			   this->label7->Text = L"lblViolationCount";
+			   this->label7->Text = L"0";
+			   this->label7->TextAlign = System::Drawing::ContentAlignment::MiddleCenter;
 			   // 
 			   // label6
 			   // 
-			   this->label6->AutoSize = true;
-			   this->label6->Location = System::Drawing::Point(159, 125);
+			   this->label6->BackColor = System::Drawing::Color::FromArgb(static_cast<System::Int32>(static_cast<System::Byte>(255)), static_cast<System::Int32>(static_cast<System::Byte>(193)),
+				   static_cast<System::Int32>(static_cast<System::Byte>(7)));
+			   this->label6->Font = (gcnew System::Drawing::Font(L"Arial", 26, System::Drawing::FontStyle::Bold));
+			   this->label6->ForeColor = System::Drawing::Color::White;
+			   this->label6->Location = System::Drawing::Point(60, 291);
 			   this->label6->Name = L"label6";
-			   this->label6->Size = System::Drawing::Size(78, 13);
+			   this->label6->Size = System::Drawing::Size(320, 50);
 			   this->label6->TabIndex = 15;
-			   this->label6->Text = L"lblNormalCount";
+			   this->label6->Text = L"0";
+			   this->label6->TextAlign = System::Drawing::ContentAlignment::MiddleCenter;
+			   this->label6->Click += gcnew System::EventHandler(this, &OfflineUploadForm::label6_Click);
 			   // 
 			   // label5
 			   // 
-			   this->label5->AutoSize = true;
-			   this->label5->Location = System::Drawing::Point(58, 125);
+			   this->label5->BackColor = System::Drawing::Color::FromArgb(static_cast<System::Int32>(static_cast<System::Byte>(76)), static_cast<System::Int32>(static_cast<System::Byte>(175)),
+				   static_cast<System::Int32>(static_cast<System::Byte>(80)));
+			   this->label5->Font = (gcnew System::Drawing::Font(L"Arial", 26, System::Drawing::FontStyle::Bold));
+			   this->label5->ForeColor = System::Drawing::Color::White;
+			   this->label5->Location = System::Drawing::Point(60, 212);
 			   this->label5->Name = L"label5";
-			   this->label5->Size = System::Drawing::Size(74, 13);
+			   this->label5->Size = System::Drawing::Size(320, 50);
 			   this->label5->TabIndex = 14;
-			   this->label5->Text = L"lblEmptyCount";
-			   // 
-			   // label4
-			   // 
-			   this->label4->AutoSize = true;
-			   this->label4->BackColor = System::Drawing::Color::Red;
-			   this->label4->Font = (gcnew System::Drawing::Font(L"Segoe UI", 16.25F, System::Drawing::FontStyle::Bold, System::Drawing::GraphicsUnit::Point,
-				   static_cast<System::Byte>(0)));
-			   this->label4->ForeColor = System::Drawing::Color::FromArgb(static_cast<System::Int32>(static_cast<System::Byte>(45)), static_cast<System::Int32>(static_cast<System::Byte>(45)),
-				   static_cast<System::Int32>(static_cast<System::Byte>(48)));
-			   this->label4->Location = System::Drawing::Point(282, 168);
-			   this->label4->Name = L"label4";
-			   this->label4->Size = System::Drawing::Size(106, 30);
-			   this->label4->TabIndex = 11;
-			   this->label4->Text = L"Violation";
-			   // 
-			   // label3
-			   // 
-			   this->label3->AutoSize = true;
-			   this->label3->BackColor = System::Drawing::Color::Yellow;
-			   this->label3->Font = (gcnew System::Drawing::Font(L"Segoe UI", 16.25F, System::Drawing::FontStyle::Bold, System::Drawing::GraphicsUnit::Point,
-				   static_cast<System::Byte>(0)));
-			   this->label3->ForeColor = System::Drawing::Color::FromArgb(static_cast<System::Int32>(static_cast<System::Byte>(45)), static_cast<System::Int32>(static_cast<System::Byte>(45)),
-				   static_cast<System::Int32>(static_cast<System::Byte>(48)));
-			   this->label3->Location = System::Drawing::Point(157, 168);
-			   this->label3->Name = L"label3";
-			   this->label3->Size = System::Drawing::Size(90, 30);
-			   this->label3->TabIndex = 10;
-			   this->label3->Text = L"Normal";
-			   // 
-			   // label2
-			   // 
-			   this->label2->AutoSize = true;
-			   this->label2->BackColor = System::Drawing::Color::FromArgb(static_cast<System::Int32>(static_cast<System::Byte>(128)), static_cast<System::Int32>(static_cast<System::Byte>(255)),
-				   static_cast<System::Int32>(static_cast<System::Byte>(128)));
-			   this->label2->Font = (gcnew System::Drawing::Font(L"Segoe UI", 16.25F, System::Drawing::FontStyle::Bold, System::Drawing::GraphicsUnit::Point,
-				   static_cast<System::Byte>(0)));
-			   this->label2->ForeColor = System::Drawing::Color::FromArgb(static_cast<System::Int32>(static_cast<System::Byte>(45)), static_cast<System::Int32>(static_cast<System::Byte>(45)),
-				   static_cast<System::Int32>(static_cast<System::Byte>(48)));
-			   this->label2->Location = System::Drawing::Point(44, 168);
-			   this->label2->Name = L"label2";
-			   this->label2->Size = System::Drawing::Size(80, 30);
-			   this->label2->TabIndex = 9;
-			   this->label2->Text = L"Empty";
+			   this->label5->Text = L"0";
+			   this->label5->TextAlign = System::Drawing::ContentAlignment::MiddleCenter;
 			   // 
 			   // pnlViolationContainer
 			   // 
@@ -781,17 +742,17 @@ namespace ConsoleApplication3 {
 			   this->pnlViolationContainer->Controls->Add(this->btnClearViolations);
 			   this->pnlViolationContainer->Controls->Add(this->lblViolationCount);
 			   this->pnlViolationContainer->Controls->Add(this->lblViolationTitle);
-			   this->pnlViolationContainer->Location = System::Drawing::Point(12, 502);
+			   this->pnlViolationContainer->Location = System::Drawing::Point(37, 456);
 			   this->pnlViolationContainer->Name = L"pnlViolationContainer";
-			   this->pnlViolationContainer->Size = System::Drawing::Size(851, 225);
+			   this->pnlViolationContainer->Size = System::Drawing::Size(352, 225);
 			   this->pnlViolationContainer->TabIndex = 13;
 			   // 
 			   // flpViolations
 			   // 
 			   this->flpViolations->AutoScroll = true;
-			   this->flpViolations->Location = System::Drawing::Point(3, 58);
+			   this->flpViolations->Location = System::Drawing::Point(30, 52);
 			   this->flpViolations->Name = L"flpViolations";
-			   this->flpViolations->Size = System::Drawing::Size(845, 162);
+			   this->flpViolations->Size = System::Drawing::Size(286, 162);
 			   this->flpViolations->TabIndex = 3;
 			   // 
 			   // btnClearViolations
@@ -1060,7 +1021,10 @@ namespace ConsoleApplication3 {
 			btnUploadImage->Enabled = true; btnUploadVideo->Enabled = true;
 			MessageBox::Show("System Ready!", "Success", MessageBoxButtons::OK, MessageBoxIcon::Information);
 		}
-		else MessageBox::Show("Error loading model", "Error", MessageBoxButtons::OK, MessageBoxIcon::Error);
+		else {
+			System::String^ errorMsg = e->Result != nullptr ? safe_cast<System::String^>(e->Result) : L"Unknown error";
+			MessageBox::Show("Error loading model: " + errorMsg, "Error", MessageBoxButtons::OK, MessageBoxIcon::Error);
+		}
 	}
 
 	private: System::Void btnUploadImage_Click(System::Object^ sender, System::EventArgs^ e) {
@@ -1246,7 +1210,7 @@ namespace ConsoleApplication3 {
 
 			if (!already_captured) {
 				// Find the car with this ID and capture its bbox
-				for each(auto car in state.cars) {
+			 for each(auto car in state.cars) {
 					if (car.id == violatingId) {
 						// Capture only the bounding box region
 						cv::Rect safeBbox = car.bbox & cv::Rect(0, 0, currentFrame.cols, currentFrame.rows);
@@ -1305,5 +1269,9 @@ namespace ConsoleApplication3 {
 			trackBar1->Value = 0;
 		}
 	}
+private: System::Void label6_Click(System::Object^ sender, System::EventArgs^ e) {
+}
+private: System::Void label4_Click(System::Object^ sender, System::EventArgs^ e) {
+}
 };
 }
