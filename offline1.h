@@ -475,11 +475,13 @@ namespace ConsoleApplication3 {
 	private: System::Windows::Forms::Label^ label7;
 	private: System::Windows::Forms::Label^ label6;
 	private: System::Windows::Forms::Label^ label5;
+
+
 	private: System::Collections::Generic::Dictionary<int, System::DateTime>^ violatingCarTimers;
 
 #pragma region Windows Form Designer generated code
 		   void InitializeComponent(void) {
-		   this->components = (gcnew System::ComponentModel::Container());
+			   this->components = (gcnew System::ComponentModel::Container());
 			   this->timer1 = (gcnew System::Windows::Forms::Timer(this->components));
 			   this->processingWorker = (gcnew System::ComponentModel::BackgroundWorker());
 			   this->btnPrevFrame = (gcnew System::Windows::Forms::Button());
@@ -593,11 +595,11 @@ namespace ConsoleApplication3 {
 				   static_cast<System::Int32>(static_cast<System::Byte>(192)));
 			   this->btnUploadImage->Font = (gcnew System::Drawing::Font(L"Microsoft Sans Serif", 12, System::Drawing::FontStyle::Bold, System::Drawing::GraphicsUnit::Point,
 				   static_cast<System::Byte>(0)));
-			   this->btnUploadImage->Location = System::Drawing::Point(77, 149);
+			   this->btnUploadImage->Location = System::Drawing::Point(97, 142);
 			   this->btnUploadImage->Name = L"btnUploadImage";
-			   this->btnUploadImage->Size = System::Drawing::Size(135, 44);
+			   this->btnUploadImage->Size = System::Drawing::Size(125, 59);
 			   this->btnUploadImage->TabIndex = 5;
-			   this->btnUploadImage->Text = L"Upload Image";
+			   this->btnUploadImage->Text = L"Upload Image 📷";
 			   this->btnUploadImage->UseVisualStyleBackColor = false;
 			   this->btnUploadImage->Click += gcnew System::EventHandler(this, &OfflineUploadForm::btnUploadImage_Click);
 			   // 
@@ -607,20 +609,22 @@ namespace ConsoleApplication3 {
 				   static_cast<System::Int32>(static_cast<System::Byte>(192)));
 			   this->btnUploadVideo->Font = (gcnew System::Drawing::Font(L"Microsoft Sans Serif", 12, System::Drawing::FontStyle::Bold, System::Drawing::GraphicsUnit::Point,
 				   static_cast<System::Byte>(0)));
-			   this->btnUploadVideo->Location = System::Drawing::Point(228, 150);
+			   this->btnUploadVideo->Location = System::Drawing::Point(228, 142);
 			   this->btnUploadVideo->Name = L"btnUploadVideo";
-			   this->btnUploadVideo->Size = System::Drawing::Size(135, 43);
+			   this->btnUploadVideo->Size = System::Drawing::Size(125, 59);
 			   this->btnUploadVideo->TabIndex = 6;
-			   this->btnUploadVideo->Text = L"Upload Video";
+			   this->btnUploadVideo->Text = L"Upload Video 🎬";
 			   this->btnUploadVideo->UseVisualStyleBackColor = false;
 			   this->btnUploadVideo->Click += gcnew System::EventHandler(this, &OfflineUploadForm::btnUploadVideo_Click);
 			   // 
 			   // btnLoadParkingTemplate
 			   // 
 			   this->btnLoadParkingTemplate->BackColor = System::Drawing::Color::LightGreen;
-			   this->btnLoadParkingTemplate->Location = System::Drawing::Point(318, 88);
+			   this->btnLoadParkingTemplate->Font = (gcnew System::Drawing::Font(L"Microsoft Sans Serif", 11.25F, System::Drawing::FontStyle::Bold,
+				   System::Drawing::GraphicsUnit::Point, static_cast<System::Byte>(0)));
+			   this->btnLoadParkingTemplate->Location = System::Drawing::Point(288, 83);
 			   this->btnLoadParkingTemplate->Name = L"btnLoadParkingTemplate";
-			   this->btnLoadParkingTemplate->Size = System::Drawing::Size(100, 25);
+			   this->btnLoadParkingTemplate->Size = System::Drawing::Size(119, 47);
 			   this->btnLoadParkingTemplate->TabIndex = 7;
 			   this->btnLoadParkingTemplate->Text = L"Load Template";
 			   this->btnLoadParkingTemplate->UseVisualStyleBackColor = false;
@@ -701,7 +705,7 @@ namespace ConsoleApplication3 {
 				   static_cast<System::Int32>(static_cast<System::Byte>(54)));
 			   this->label7->Font = (gcnew System::Drawing::Font(L"Arial", 26, System::Drawing::FontStyle::Bold));
 			   this->label7->ForeColor = System::Drawing::Color::White;
-			   this->label7->Location = System::Drawing::Point(60, 369);
+			   this->label7->Location = System::Drawing::Point(60, 356);
 			   this->label7->Name = L"label7";
 			   this->label7->Size = System::Drawing::Size(320, 50);
 			   this->label7->TabIndex = 16;
@@ -728,7 +732,7 @@ namespace ConsoleApplication3 {
 				   static_cast<System::Int32>(static_cast<System::Byte>(80)));
 			   this->label5->Font = (gcnew System::Drawing::Font(L"Arial", 26, System::Drawing::FontStyle::Bold));
 			   this->label5->ForeColor = System::Drawing::Color::White;
-			   this->label5->Location = System::Drawing::Point(60, 212);
+			   this->label5->Location = System::Drawing::Point(60, 225);
 			   this->label5->Name = L"label5";
 			   this->label5->Size = System::Drawing::Size(320, 50);
 			   this->label5->TabIndex = 14;
@@ -1272,6 +1276,8 @@ namespace ConsoleApplication3 {
 private: System::Void label6_Click(System::Object^ sender, System::EventArgs^ e) {
 }
 private: System::Void label4_Click(System::Object^ sender, System::EventArgs^ e) {
+}
+private: System::Void label2_Click(System::Object^ sender, System::EventArgs^ e) {
 }
 };
 }
