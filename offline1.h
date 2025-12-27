@@ -479,8 +479,7 @@ namespace ConsoleApplication3 {
 
 #pragma region Windows Form Designer generated code
 		   void InitializeComponent(void) {
-			   this->components = (gcnew System::ComponentModel::Container());
-			   System::ComponentModel::ComponentResourceManager^ resources = (gcnew System::ComponentModel::ComponentResourceManager(OfflineUploadForm::typeid));
+		   this->components = (gcnew System::ComponentModel::Container());
 			   this->timer1 = (gcnew System::Windows::Forms::Timer(this->components));
 			   this->processingWorker = (gcnew System::ComponentModel::BackgroundWorker());
 			   this->btnPrevFrame = (gcnew System::Windows::Forms::Button());
@@ -562,12 +561,12 @@ namespace ConsoleApplication3 {
 			   // 
 			   // btnPlayPause
 			   // 
-			   this->btnPlayPause->Image = (cli::safe_cast<System::Drawing::Image^>(resources->GetObject(L"btnPlayPause.Image")));
-			   this->btnPlayPause->Location = System::Drawing::Point(554, 47);
-			   this->btnPlayPause->Name = L"btnPlayPause";
-			   this->btnPlayPause->Size = System::Drawing::Size(45, 44);
-			   this->btnPlayPause->TabIndex = 3;
-			   this->btnPlayPause->Click += gcnew System::EventHandler(this, &OfflineUploadForm::btnPlayPause_Click);
+	   this->btnPlayPause->Location = System::Drawing::Point(554, 47);
+	   this->btnPlayPause->Name = L"btnPlayPause";
+	   this->btnPlayPause->Size = System::Drawing::Size(45, 44);
+	   this->btnPlayPause->TabIndex = 3;
+	   this->btnPlayPause->Text = L"▶";
+	   this->btnPlayPause->Click += gcnew System::EventHandler(this, &OfflineUploadForm::btnPlayPause_Click);
 			   // 
 			   // trackBar1
 			   // 
