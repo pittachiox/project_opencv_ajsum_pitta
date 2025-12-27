@@ -42,13 +42,17 @@ namespace ConsoleApplication3 {
 	private: System::Windows::Forms::PictureBox^ pictureBox1;
 	private: System::Windows::Forms::Label^ label3;
 	private: System::Windows::Forms::Label^ label4;
-	private: System::Windows::Forms::Button^ btnID3NormalZone;
-	private: System::Windows::Forms::Button^ btnID2NormalZone;
+
+
 	private: System::Windows::Forms::Button^ btnSeeCamera;
-	private: System::Windows::Forms::Button^ btnSave;
-	private: System::Windows::Forms::Button^ btnCancel;
+
+
 	private: System::Windows::Forms::Button^ btnParkingSetup;
 	private: System::ComponentModel::Container^ components;
+
+
+	private: System::Windows::Forms::Button^ btnID3NormalZone;
+	private: System::Windows::Forms::Button^ btnID2NormalZone;
 
 	private:
 		Bitmap^ bmp;
@@ -66,12 +70,10 @@ namespace ConsoleApplication3 {
 			this->pictureBox1 = (gcnew System::Windows::Forms::PictureBox());
 			this->btnParkingSetup = (gcnew System::Windows::Forms::Button());
 			this->btnSeeCamera = (gcnew System::Windows::Forms::Button());
-			this->btnSave = (gcnew System::Windows::Forms::Button());
-			this->btnCancel = (gcnew System::Windows::Forms::Button());
-			this->btnID3NormalZone = (gcnew System::Windows::Forms::Button());
-			this->btnID2NormalZone = (gcnew System::Windows::Forms::Button());
 			this->label4 = (gcnew System::Windows::Forms::Label());
 			this->label3 = (gcnew System::Windows::Forms::Label());
+			this->btnID3NormalZone = (gcnew System::Windows::Forms::Button());
+			this->btnID2NormalZone = (gcnew System::Windows::Forms::Button());
 			this->menuStrip1->SuspendLayout();
 			(cli::safe_cast<System::ComponentModel::ISupportInitialize^>(this->splitContainer1))->BeginInit();
 			this->splitContainer1->Panel1->SuspendLayout();
@@ -129,8 +131,6 @@ namespace ConsoleApplication3 {
 			this->splitContainer1->Panel2->BackColor = System::Drawing::Color::OldLace;
 			this->splitContainer1->Panel2->Controls->Add(this->btnParkingSetup);
 			this->splitContainer1->Panel2->Controls->Add(this->btnSeeCamera);
-			this->splitContainer1->Panel2->Controls->Add(this->btnSave);
-			this->splitContainer1->Panel2->Controls->Add(this->btnCancel);
 			this->splitContainer1->Panel2->Controls->Add(this->btnID3NormalZone);
 			this->splitContainer1->Panel2->Controls->Add(this->btnID2NormalZone);
 			this->splitContainer1->Panel2->Controls->Add(this->label4);
@@ -189,7 +189,7 @@ namespace ConsoleApplication3 {
 			this->btnParkingSetup->FlatStyle = System::Windows::Forms::FlatStyle::Flat;
 			this->btnParkingSetup->Font = (gcnew System::Drawing::Font(L"Segoe UI", 13.75F, System::Drawing::FontStyle::Bold));
 			this->btnParkingSetup->ForeColor = System::Drawing::Color::White;
-			this->btnParkingSetup->Location = System::Drawing::Point(112, 557);
+			this->btnParkingSetup->Location = System::Drawing::Point(109, 392);
 			this->btnParkingSetup->Name = L"btnParkingSetup";
 			this->btnParkingSetup->Size = System::Drawing::Size(253, 60);
 			this->btnParkingSetup->TabIndex = 9;
@@ -205,90 +205,17 @@ namespace ConsoleApplication3 {
 			this->btnSeeCamera->FlatAppearance->MouseOverBackColor = System::Drawing::Color::FromArgb(static_cast<System::Int32>(static_cast<System::Byte>(255)),
 				static_cast<System::Int32>(static_cast<System::Byte>(175)), static_cast<System::Int32>(static_cast<System::Byte>(0)));
 			this->btnSeeCamera->FlatStyle = System::Windows::Forms::FlatStyle::Flat;
-			this->btnSeeCamera->Font = (gcnew System::Drawing::Font(L"Segoe UI", 13.75F, System::Drawing::FontStyle::Regular, System::Drawing::GraphicsUnit::Point,
+			this->btnSeeCamera->Font = (gcnew System::Drawing::Font(L"Segoe UI", 14.25F, System::Drawing::FontStyle::Bold, System::Drawing::GraphicsUnit::Point,
 				static_cast<System::Byte>(0)));
 			this->btnSeeCamera->ForeColor = System::Drawing::Color::FromArgb(static_cast<System::Int32>(static_cast<System::Byte>(45)), static_cast<System::Int32>(static_cast<System::Byte>(45)),
 				static_cast<System::Int32>(static_cast<System::Byte>(48)));
-			this->btnSeeCamera->Location = System::Drawing::Point(112, 506);
+			this->btnSeeCamera->Location = System::Drawing::Point(123, 341);
 			this->btnSeeCamera->Name = L"btnSeeCamera";
-			this->btnSeeCamera->Size = System::Drawing::Size(253, 45);
+			this->btnSeeCamera->Size = System::Drawing::Size(225, 45);
 			this->btnSeeCamera->TabIndex = 8;
 			this->btnSeeCamera->Text = L"see camera";
 			this->btnSeeCamera->UseVisualStyleBackColor = false;
 			this->btnSeeCamera->Click += gcnew System::EventHandler(this, &MyForm::btnSeeCamera_Click);
-			// 
-			// btnSave
-			// 
-			this->btnSave->BackColor = System::Drawing::Color::FromArgb(static_cast<System::Int32>(static_cast<System::Byte>(40)), static_cast<System::Int32>(static_cast<System::Byte>(167)),
-				static_cast<System::Int32>(static_cast<System::Byte>(69)));
-			this->btnSave->FlatAppearance->BorderSize = 0;
-			this->btnSave->FlatAppearance->MouseOverBackColor = System::Drawing::Color::FromArgb(static_cast<System::Int32>(static_cast<System::Byte>(25)),
-				static_cast<System::Int32>(static_cast<System::Byte>(150)), static_cast<System::Int32>(static_cast<System::Byte>(50)));
-			this->btnSave->FlatStyle = System::Windows::Forms::FlatStyle::Flat;
-			this->btnSave->Font = (gcnew System::Drawing::Font(L"Segoe UI", 13.75F, System::Drawing::FontStyle::Regular, System::Drawing::GraphicsUnit::Point,
-				static_cast<System::Byte>(0)));
-			this->btnSave->ForeColor = System::Drawing::Color::White;
-			this->btnSave->Location = System::Drawing::Point(139, 404);
-			this->btnSave->Name = L"btnSave";
-			this->btnSave->Size = System::Drawing::Size(197, 45);
-			this->btnSave->TabIndex = 7;
-			this->btnSave->Text = L"save";
-			this->btnSave->UseVisualStyleBackColor = false;
-			this->btnSave->Click += gcnew System::EventHandler(this, &MyForm::btnSave_Click);
-			// 
-			// btnCancel
-			// 
-			this->btnCancel->BackColor = System::Drawing::Color::FromArgb(static_cast<System::Int32>(static_cast<System::Byte>(220)), static_cast<System::Int32>(static_cast<System::Byte>(53)),
-				static_cast<System::Int32>(static_cast<System::Byte>(69)));
-			this->btnCancel->FlatAppearance->BorderSize = 0;
-			this->btnCancel->FlatAppearance->MouseOverBackColor = System::Drawing::Color::FromArgb(static_cast<System::Int32>(static_cast<System::Byte>(200)),
-				static_cast<System::Int32>(static_cast<System::Byte>(30)), static_cast<System::Int32>(static_cast<System::Byte>(50)));
-			this->btnCancel->FlatStyle = System::Windows::Forms::FlatStyle::Flat;
-			this->btnCancel->Font = (gcnew System::Drawing::Font(L"Segoe UI", 13.75F, System::Drawing::FontStyle::Regular, System::Drawing::GraphicsUnit::Point,
-				static_cast<System::Byte>(0)));
-			this->btnCancel->ForeColor = System::Drawing::Color::White;
-			this->btnCancel->Location = System::Drawing::Point(139, 455);
-			this->btnCancel->Name = L"btnCancel";
-			this->btnCancel->Size = System::Drawing::Size(197, 45);
-			this->btnCancel->TabIndex = 6;
-			this->btnCancel->Text = L"cancel";
-			this->btnCancel->UseVisualStyleBackColor = false;
-			// 
-			// btnID3NormalZone
-			// 
-			this->btnID3NormalZone->BackColor = System::Drawing::Color::FromArgb(static_cast<System::Int32>(static_cast<System::Byte>(0)), static_cast<System::Int32>(static_cast<System::Byte>(120)),
-				static_cast<System::Int32>(static_cast<System::Byte>(215)));
-			this->btnID3NormalZone->FlatAppearance->BorderSize = 0;
-			this->btnID3NormalZone->FlatAppearance->MouseOverBackColor = System::Drawing::Color::FromArgb(static_cast<System::Int32>(static_cast<System::Byte>(0)),
-				static_cast<System::Int32>(static_cast<System::Byte>(100)), static_cast<System::Int32>(static_cast<System::Byte>(200)));
-			this->btnID3NormalZone->FlatStyle = System::Windows::Forms::FlatStyle::Flat;
-			this->btnID3NormalZone->Font = (gcnew System::Drawing::Font(L"Segoe UI", 13.75F, System::Drawing::FontStyle::Regular, System::Drawing::GraphicsUnit::Point,
-				static_cast<System::Byte>(0)));
-			this->btnID3NormalZone->ForeColor = System::Drawing::Color::White;
-			this->btnID3NormalZone->Location = System::Drawing::Point(109, 174);
-			this->btnID3NormalZone->Name = L"btnID3NormalZone";
-			this->btnID3NormalZone->Size = System::Drawing::Size(257, 45);
-			this->btnID3NormalZone->TabIndex = 5;
-			this->btnID3NormalZone->Text = L"ID3 Normal Zone";
-			this->btnID3NormalZone->UseVisualStyleBackColor = false;
-			// 
-			// btnID2NormalZone
-			// 
-			this->btnID2NormalZone->BackColor = System::Drawing::Color::FromArgb(static_cast<System::Int32>(static_cast<System::Byte>(0)), static_cast<System::Int32>(static_cast<System::Byte>(120)),
-				static_cast<System::Int32>(static_cast<System::Byte>(215)));
-			this->btnID2NormalZone->FlatAppearance->BorderSize = 0;
-			this->btnID2NormalZone->FlatAppearance->MouseOverBackColor = System::Drawing::Color::FromArgb(static_cast<System::Int32>(static_cast<System::Byte>(0)),
-				static_cast<System::Int32>(static_cast<System::Byte>(100)), static_cast<System::Int32>(static_cast<System::Byte>(200)));
-			this->btnID2NormalZone->FlatStyle = System::Windows::Forms::FlatStyle::Flat;
-			this->btnID2NormalZone->Font = (gcnew System::Drawing::Font(L"Segoe UI", 13.75F, System::Drawing::FontStyle::Regular, System::Drawing::GraphicsUnit::Point,
-				static_cast<System::Byte>(0)));
-			this->btnID2NormalZone->ForeColor = System::Drawing::Color::White;
-			this->btnID2NormalZone->Location = System::Drawing::Point(109, 123);
-			this->btnID2NormalZone->Name = L"btnID2NormalZone";
-			this->btnID2NormalZone->Size = System::Drawing::Size(258, 45);
-			this->btnID2NormalZone->TabIndex = 4;
-			this->btnID2NormalZone->Text = L"ID2 Normal Zone";
-			this->btnID2NormalZone->UseVisualStyleBackColor = false;
 			// 
 			// label4
 			// 
@@ -316,6 +243,40 @@ namespace ConsoleApplication3 {
 			this->label3->Size = System::Drawing::Size(215, 31);
 			this->label3->TabIndex = 2;
 			this->label3->Text = L"เลือกเฟรม & เครื่องมือ";
+			// 
+			// btnID3NormalZone
+			// 
+			this->btnID3NormalZone->BackColor = System::Drawing::Color::LightSteelBlue;
+			this->btnID3NormalZone->FlatAppearance->BorderSize = 0;
+			this->btnID3NormalZone->FlatAppearance->MouseOverBackColor = System::Drawing::Color::FromArgb(static_cast<System::Int32>(static_cast<System::Byte>(0)),
+				static_cast<System::Int32>(static_cast<System::Byte>(100)), static_cast<System::Int32>(static_cast<System::Byte>(200)));
+			this->btnID3NormalZone->FlatStyle = System::Windows::Forms::FlatStyle::Flat;
+			this->btnID3NormalZone->Font = (gcnew System::Drawing::Font(L"Segoe UI", 13.75F, System::Drawing::FontStyle::Regular, System::Drawing::GraphicsUnit::Point,
+				static_cast<System::Byte>(0)));
+			this->btnID3NormalZone->ForeColor = System::Drawing::Color::White;
+			this->btnID3NormalZone->Location = System::Drawing::Point(109, 174);
+			this->btnID3NormalZone->Name = L"btnID3NormalZone";
+			this->btnID3NormalZone->Size = System::Drawing::Size(257, 45);
+			this->btnID3NormalZone->TabIndex = 5;
+			this->btnID3NormalZone->Text = L"ID3 Normal Zone";
+			this->btnID3NormalZone->UseVisualStyleBackColor = false;
+			// 
+			// btnID2NormalZone
+			// 
+			this->btnID2NormalZone->BackColor = System::Drawing::Color::LightSteelBlue;
+			this->btnID2NormalZone->FlatAppearance->BorderSize = 0;
+			this->btnID2NormalZone->FlatAppearance->MouseOverBackColor = System::Drawing::Color::FromArgb(static_cast<System::Int32>(static_cast<System::Byte>(0)),
+				static_cast<System::Int32>(static_cast<System::Byte>(100)), static_cast<System::Int32>(static_cast<System::Byte>(200)));
+			this->btnID2NormalZone->FlatStyle = System::Windows::Forms::FlatStyle::Flat;
+			this->btnID2NormalZone->Font = (gcnew System::Drawing::Font(L"Segoe UI", 13.75F, System::Drawing::FontStyle::Regular, System::Drawing::GraphicsUnit::Point,
+				static_cast<System::Byte>(0)));
+			this->btnID2NormalZone->ForeColor = System::Drawing::Color::White;
+			this->btnID2NormalZone->Location = System::Drawing::Point(109, 123);
+			this->btnID2NormalZone->Name = L"btnID2NormalZone";
+			this->btnID2NormalZone->Size = System::Drawing::Size(258, 45);
+			this->btnID2NormalZone->TabIndex = 4;
+			this->btnID2NormalZone->Text = L"ID2 Normal Zone";
+			this->btnID2NormalZone->UseVisualStyleBackColor = false;
 			// 
 			// MyForm
 			// 
