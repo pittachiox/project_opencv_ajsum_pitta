@@ -500,28 +500,24 @@ namespace ConsoleApplication3 {
 	private: Object^ bufferLock;
 	private: bool isProcessing;
 	private: System::Windows::Forms::Label^ lblCameraName;
-	private: System::Windows::Forms::Button^ btnPlayPause;
-	private: System::Windows::Forms::TrackBar^ trackBar1;
-	private: System::Windows::Forms::Button^ btnNextFrame;
 	private: System::Windows::Forms::Button^ btnOnlineMode;
-	private: System::Windows::Forms::Button^ btnPrevFrame;
 	private: System::Windows::Forms::Panel^ panel2;
-	private: System::Windows::Forms::Label^ lblViolation;
-	private: System::Windows::Forms::Label^ lblNormal;
-	private: System::Windows::Forms::Label^ lblEmpty;
-	private: System::Windows::Forms::Button^ btnLiveCamera;
-	private: System::Windows::Forms::Button^ btnLoadParkingTemplate;
-	private: System::Windows::Forms::CheckBox^ chkParkingMode;
+private: System::Windows::Forms::Label^ lblViolation;
+private: System::Windows::Forms::Label^ lblNormal;
+private: System::Windows::Forms::Label^ lblEmpty;
+private: System::Windows::Forms::Button^ btnLiveCamera;
+private: System::Windows::Forms::Button^ btnLoadParkingTemplate;
+private: System::Windows::Forms::CheckBox^ chkParkingMode;
 
-	private: System::Windows::Forms::Label^ lblLogs;
-	private: bool shouldStop;
-	private: long long lastProcessedSeq = -1;
-	private: long long lastDisplaySeq = -1;
-	private: System::Windows::Forms::SplitContainer^ splitContainer1;
-	private: Bitmap^ bmpBuffer1;
-	private: Bitmap^ bmpBuffer2;
-	private: bool useBuffer1;
-	private: System::Windows::Forms::Label^ label1;
+private: System::Windows::Forms::Label^ lblLogs;
+private: bool shouldStop;
+private: long long lastProcessedSeq = -1;
+private: long long lastDisplaySeq = -1;
+private: System::Windows::Forms::SplitContainer^ splitContainer1;
+private: Bitmap^ bmpBuffer1;
+private: Bitmap^ bmpBuffer2;
+private: bool useBuffer1;
+private: System::Windows::Forms::Label^ label1;
 
 	// *** [NEW] PARKING STATISTICS LABELS ***
 	private: System::Windows::Forms::Label^ label5_online;
@@ -554,11 +550,7 @@ namespace ConsoleApplication3 {
 			   this->timer1 = (gcnew System::Windows::Forms::Timer(this->components));
 			   this->pictureBox1 = (gcnew System::Windows::Forms::PictureBox());
 			   this->processingWorker = (gcnew System::ComponentModel::BackgroundWorker());
-			   this->btnPrevFrame = (gcnew System::Windows::Forms::Button());
-			   this->btnNextFrame = (gcnew System::Windows::Forms::Button());
 			   this->btnOnlineMode = (gcnew System::Windows::Forms::Button());
-			   this->btnPlayPause = (gcnew System::Windows::Forms::Button());
-			   this->trackBar1 = (gcnew System::Windows::Forms::TrackBar());
 			   this->lblCameraName = (gcnew System::Windows::Forms::Label());
 			   this->panel2 = (gcnew System::Windows::Forms::Panel());
 			   this->lblLogs = (gcnew System::Windows::Forms::Label());
@@ -570,7 +562,7 @@ namespace ConsoleApplication3 {
 			   this->btnLiveCamera = (gcnew System::Windows::Forms::Button());
 			   this->label5_online = (gcnew System::Windows::Forms::Label());
 			   this->label6_online = (gcnew System::Windows::Forms::Label());
-			   this->label7_online = (gcnew System::Windows::Forms::Label());
+				this->label7_online = (gcnew System::Windows::Forms::Label());
 			   this->pnlViolationContainer_online = (gcnew System::Windows::Forms::Panel());
 			   this->flpViolations_online = (gcnew System::Windows::Forms::FlowLayoutPanel());
 			   this->btnClearViolations_online = (gcnew System::Windows::Forms::Button());
@@ -579,8 +571,6 @@ namespace ConsoleApplication3 {
 			   this->splitContainer1 = (gcnew System::Windows::Forms::SplitContainer());
 			   this->label1 = (gcnew System::Windows::Forms::Label());
 			   (cli::safe_cast<System::ComponentModel::ISupportInitialize^>(this->pictureBox1))->BeginInit();
-			   (cli::safe_cast<System::ComponentModel::ISupportInitialize^>(this->trackBar1))->BeginInit();
-			   this->pnlViolationContainer_online->SuspendLayout();
 			   (cli::safe_cast<System::ComponentModel::ISupportInitialize^>(this->splitContainer1))->BeginInit();
 			   this->splitContainer1->Panel1->SuspendLayout();
 			   this->splitContainer1->Panel2->SuspendLayout();
@@ -609,26 +599,6 @@ namespace ConsoleApplication3 {
 			   this->processingWorker->WorkerSupportsCancellation = true;
 			   this->processingWorker->DoWork += gcnew System::ComponentModel::DoWorkEventHandler(this, &UploadForm::processingWorker_DoWork);
 			   // 
-			   // btnPrevFrame
-			   // 
-			   this->btnPrevFrame->BackColor = System::Drawing::Color::Yellow;
-			   this->btnPrevFrame->Location = System::Drawing::Point(42, 47);
-			   this->btnPrevFrame->Name = L"btnPrevFrame";
-			   this->btnPrevFrame->Size = System::Drawing::Size(28, 23);
-			   this->btnPrevFrame->TabIndex = 0;
-			   this->btnPrevFrame->Text = L"<";
-			   this->btnPrevFrame->UseVisualStyleBackColor = false;
-			   // 
-			   // btnNextFrame
-			   // 
-			   this->btnNextFrame->BackColor = System::Drawing::Color::Yellow;
-			   this->btnNextFrame->Location = System::Drawing::Point(184, 47);
-			   this->btnNextFrame->Name = L"btnNextFrame";
-			   this->btnNextFrame->Size = System::Drawing::Size(27, 23);
-			   this->btnNextFrame->TabIndex = 1;
-			   this->btnNextFrame->Text = L">";
-			   this->btnNextFrame->UseVisualStyleBackColor = false;
-			   // 
 			   // btnOnlineMode
 			   // 
 			   this->btnOnlineMode->BackColor = System::Drawing::Color::FromArgb(static_cast<System::Int32>(static_cast<System::Byte>(40)), static_cast<System::Int32>(static_cast<System::Byte>(167)),
@@ -642,24 +612,6 @@ namespace ConsoleApplication3 {
 			   this->btnOnlineMode->TabIndex = 2;
 			   this->btnOnlineMode->Text = L"Online";
 			   this->btnOnlineMode->UseVisualStyleBackColor = false;
-			   // 
-			   // btnPlayPause
-			   // 
-			   this->btnPlayPause->BackColor = System::Drawing::Color::Gold;
-			   this->btnPlayPause->Location = System::Drawing::Point(554, 47);
-			   this->btnPlayPause->Name = L"btnPlayPause";
-			   this->btnPlayPause->Size = System::Drawing::Size(45, 44);
-			   this->btnPlayPause->TabIndex = 3;
-			   this->btnPlayPause->Text = L"▶";
-			   this->btnPlayPause->UseVisualStyleBackColor = false;
-			   this->btnPlayPause->Click += gcnew System::EventHandler(this, &UploadForm::btnPlayPause_Click);
-			   // 
-			   // trackBar1
-			   // 
-			   this->trackBar1->Location = System::Drawing::Point(605, 47);
-			   this->trackBar1->Name = L"trackBar1";
-			   this->trackBar1->Size = System::Drawing::Size(217, 45);
-			   this->trackBar1->TabIndex = 4;
 			   // 
 			   // lblCameraName
 			   // 
@@ -799,7 +751,7 @@ namespace ConsoleApplication3 {
 			   this->pnlViolationContainer_online->Controls->Add(this->lblViolationTitle_online);
 			   this->pnlViolationContainer_online->Location = System::Drawing::Point(37, 456);
 			   this->pnlViolationContainer_online->Name = L"pnlViolationContainer_online";
-			   this->pnlViolationContainer_online->Size = System::Drawing::Size(352, 225);
+			   this->pnlViolationContainer_online->Size = System::Drawing::Size(352, 450);
 			   this->pnlViolationContainer_online->TabIndex = 13;
 			   // 
 			   // flpViolations_online
@@ -807,7 +759,7 @@ namespace ConsoleApplication3 {
 			   this->flpViolations_online->AutoScroll = true;
 			   this->flpViolations_online->Location = System::Drawing::Point(30, 52);
 			   this->flpViolations_online->Name = L"flpViolations_online";
-			   this->flpViolations_online->Size = System::Drawing::Size(286, 162);
+			   this->flpViolations_online->Size = System::Drawing::Size(286, 385);
 			   this->flpViolations_online->TabIndex = 3;
 			   // 
 			   // btnClearViolations_online
@@ -852,12 +804,7 @@ namespace ConsoleApplication3 {
 			   // splitContainer1.Panel1
 			   // 
 			   this->splitContainer1->Panel1->BackColor = System::Drawing::Color::LightSteelBlue;
-			   this->splitContainer1->Panel1->Controls->Add(this->label1);
 			   this->splitContainer1->Panel1->Controls->Add(this->btnOnlineMode);
-			   this->splitContainer1->Panel1->Controls->Add(this->trackBar1);
-			   this->splitContainer1->Panel1->Controls->Add(this->btnPlayPause);
-			   this->splitContainer1->Panel1->Controls->Add(this->btnNextFrame);
-			   this->splitContainer1->Panel1->Controls->Add(this->btnPrevFrame);
 			   this->splitContainer1->Panel1->Controls->Add(this->pictureBox1);
 			   this->splitContainer1->Panel1->Padding = System::Windows::Forms::Padding(30);
 			   // 
@@ -901,7 +848,6 @@ namespace ConsoleApplication3 {
 			   this->Text = L"Online Mode - Loading Model...";
 			   this->FormClosing += gcnew System::Windows::Forms::FormClosingEventHandler(this, &UploadForm::UploadForm_FormClosing);
 			   (cli::safe_cast<System::ComponentModel::ISupportInitialize^>(this->pictureBox1))->EndInit();
-			   (cli::safe_cast<System::ComponentModel::ISupportInitialize^>(this->trackBar1))->EndInit();
 			   this->pnlViolationContainer_online->ResumeLayout(false);
 			   this->pnlViolationContainer_online->PerformLayout();
 			   this->splitContainer1->Panel1->ResumeLayout(false);
@@ -974,6 +920,11 @@ namespace ConsoleApplication3 {
 				}
 			}
 
+			// *** [NEW] UPDATE LOGS WITH CURRENT DATETIME ***
+			System::DateTime now = System::DateTime::Now;
+			System::String^ dateTimeStr = now.ToString(L"dd/MM/yy");
+			lblLogs->Text = dateTimeStr;
+
 			// *** [NEW] UPDATE PARKING STATISTICS LABELS ***
 			OnlineAppState state;
 			{
@@ -1009,10 +960,6 @@ namespace ConsoleApplication3 {
 		isProcessing = false;
 		timer1->Stop();
 		if (processingWorker->IsBusy) processingWorker->CancelAsync();
-	}
-
-	private: System::Void btnPlayPause_Click(System::Object^ sender, System::EventArgs^ e) {
-		if (isProcessing) StopProcessing(); else StartProcessing();
 	}
 
 	private: System::Void LoadModel_DoWork(System::Object^ sender, DoWorkEventArgs^ e) {
@@ -1541,7 +1488,7 @@ private: System::Void UploadForm_FormClosing(System::Object^ sender, FormClosing
 	private: System::Void lblLogs_Click(System::Object^ sender, System::EventArgs^ e) {
 		if (isProcessing) {
 			System::DateTime now = System::DateTime::Now;
-			System::String^ dateTimeStr = now.ToString(L"dd/MM/yyyy HH:mm:ss");
+			System::String^ dateTimeStr = now.ToString(L"dd/MM/yy");
 			lblLogs->Text = dateTimeStr;
 		}
 		else {

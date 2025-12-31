@@ -590,6 +590,7 @@ namespace ConsoleApplication3 {
 			   this->lblLogs->Size = System::Drawing::Size(163, 31);
 			   this->lblLogs->TabIndex = 0;
 			   this->lblLogs->Text = L"logs 25/12/67";
+			   this->lblLogs->Visible = false;
 			   // 
 			   // btnUploadImage
 			   // 
@@ -671,7 +672,6 @@ namespace ConsoleApplication3 {
 			   this->splitContainer1->Panel2->Controls->Add(this->pnlViolationContainer);
 			   this->splitContainer1->Panel2->Controls->Add(this->btnUploadVideo);
 			   this->splitContainer1->Panel2->Controls->Add(this->btnUploadImage);
-			   this->splitContainer1->Panel2->Controls->Add(this->lblLogs);
 			   this->splitContainer1->Size = System::Drawing::Size(1443, 759);
 			   this->splitContainer1->SplitterDistance = 1009;
 			   this->splitContainer1->TabIndex = 5;
@@ -749,7 +749,7 @@ namespace ConsoleApplication3 {
 			   this->pnlViolationContainer->Controls->Add(this->lblViolationTitle);
 			   this->pnlViolationContainer->Location = System::Drawing::Point(37, 456);
 			   this->pnlViolationContainer->Name = L"pnlViolationContainer";
-			   this->pnlViolationContainer->Size = System::Drawing::Size(352, 225);
+			   this->pnlViolationContainer->Size = System::Drawing::Size(352, 450);
 			   this->pnlViolationContainer->TabIndex = 13;
 			   // 
 			   // flpViolations
@@ -757,7 +757,7 @@ namespace ConsoleApplication3 {
 			   this->flpViolations->AutoScroll = true;
 			   this->flpViolations->Location = System::Drawing::Point(30, 52);
 			   this->flpViolations->Name = L"flpViolations";
-			   this->flpViolations->Size = System::Drawing::Size(286, 162);
+			   this->flpViolations->Size = System::Drawing::Size(286, 385);
 			   this->flpViolations->TabIndex = 3;
 			   // 
 			   // btnClearViolations
