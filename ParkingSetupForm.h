@@ -556,12 +556,12 @@ namespace ConsoleApplication3 {
 			cv::putText(display, std::to_string(slot.id), slot.getCenter(),
 				cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(255, 255, 0), 2);
 
-			// Draw delete button (X) on top-right of each slot
-			cv::Point topRight = slot.getTopRight();
-			cv::Rect deleteBtn(topRight.x - 15, topRight.y - 15, 30, 30);
-			cv::rectangle(display, deleteBtn, cv::Scalar(0, 0, 255), -1); // Red filled rectangle
-			cv::putText(display, "X", cv::Point(topRight.x - 5, topRight.y + 5),
-				cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(255, 255, 255), 2);
+			//// Draw delete button (X) on top-right of each slot
+			//cv::Point topRight = slot.getTopRight();
+			//cv::Rect deleteBtn(topRight.x - 15, topRight.y - 15, 30, 30);
+			//cv::rectangle(display, deleteBtn, cv::Scalar(0, 0, 255), -1); // Red filled rectangle
+			//cv::putText(display, "X", cv::Point(topRight.x - 5, topRight.y + 5),
+			//	cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(255, 255, 255), 2);
 		}
 
 		// Draw current polygon being drawn
