@@ -526,6 +526,12 @@ namespace ConsoleApplication3 {
 			violationsList = gcnew System::Collections::Generic::List<ViolationRecord^>();
 			violatingCarTimers = gcnew System::Collections::Generic::Dictionary<int, System::DateTime>();
 
+			// [UI FIX] Disable Upload buttons until template is loaded
+			btnUploadImage->Enabled = false;
+			btnUploadVideo->Enabled = false;
+			btnUploadImage->BackColor = System::Drawing::Color::Gray;
+			btnUploadVideo->BackColor = System::Drawing::Color::Gray;
+
 			BackgroundWorker^ modelLoader = gcnew BackgroundWorker();
 			modelLoader->DoWork += gcnew DoWorkEventHandler(this, &OfflineUploadForm::LoadModel_DoWork);
 			modelLoader->RunWorkerCompleted += gcnew RunWorkerCompletedEventHandler(this, &OfflineUploadForm::LoadModel_Completed);
@@ -1196,8 +1202,9 @@ namespace ConsoleApplication3 {
 	private: System::Void LoadModel_Completed(System::Object^ sender, RunWorkerCompletedEventArgs^ e) {
 		if (e->Result != nullptr && safe_cast<bool>(e->Result)) {
 			this->Text = L"Offline Mode - Ready";
-			btnUploadImage->Enabled = true; btnUploadVideo->Enabled = true;
-			MessageBox::Show("System Ready!", "Success", MessageBoxButtons::OK, MessageBoxIcon::Information);
+			// [UI FIX] Only enable template button, upload buttons stay disabled
+			btnLoadParkingTemplate->Enabled = true;
+			MessageBox::Show("Model loaded!\n\n⚠️ Please load a parking template before uploading media.", "Success", MessageBoxButtons::OK, MessageBoxIcon::Information);
 		}
 		else {
 			System::String^ errorMsg = e->Result != nullptr ? safe_cast<System::String^>(e->Result) : L"Unknown error";
@@ -1206,6 +1213,22 @@ namespace ConsoleApplication3 {
 	}
 
 	private: System::Void btnUploadImage_Click(System::Object^ sender, System::EventArgs^ e) {
+		// [UI FIX] Check if template is loaded
+		if (!g_parkingEnabled_offline.load() || !g_pm_logic || !g_pm_display) {
+			MessageBox::Show(
+				"⚠️ Parking template not loaded!\n\n" +
+				"Please click 'Load Template' button first before uploading media.\n\n" +
+				"Steps:\n" +
+				"1. Click 'Load Template' button\n" +
+				"2. Select a parking template (.xml file)\n" +
+				"3. Then upload Image or Video",
+				"Template Required",
+				MessageBoxButtons::OK,
+				MessageBoxIcon::Warning
+			);
+			return;
+		}
+
 		StopProcessing();
 		OpenFileDialog^ ofd = gcnew OpenFileDialog();
 		ofd->Filter = "Image Files|*.jpg;*.png;*.jpeg;*.bmp";
@@ -1226,6 +1249,22 @@ namespace ConsoleApplication3 {
 	}
 
 	private: System::Void btnUploadVideo_Click(System::Object^ sender, System::EventArgs^ e) {
+		// [UI FIX] Check if template is loaded
+		if (!g_parkingEnabled_offline.load() || !g_pm_logic || !g_pm_display) {
+			MessageBox::Show(
+				"⚠️ Parking template not loaded!\n\n" +
+				"Please click 'Load Template' button first before uploading media.\n\n" +
+				"Steps:\n" +
+				"1. Click 'Load Template' button\n" +
+				"2. Select a parking template (.xml file)\n" +
+				"3. Then upload Image or Video",
+				"Template Required",
+				MessageBoxButtons::OK,
+				MessageBoxIcon::Warning
+			);
+			return;
+		}
+
 		StopProcessing();
 		OpenFileDialog^ ofd = gcnew OpenFileDialog();
 		ofd->Filter = "Video Files|*.mp4;*.avi";
@@ -1269,7 +1308,22 @@ namespace ConsoleApplication3 {
 			std::string fileName = msclr::interop::marshal_as<std::string>(ofd->FileName);
 			if (LoadParkingTemplate(fileName)) {
 				chkParkingMode->Checked = true;
-				MessageBox::Show("Template loaded!", "Success", MessageBoxButtons::OK, MessageBoxIcon::Information);
+				
+				// [UI FIX] Enable upload buttons after successful template load
+				btnUploadImage->Enabled = true;
+				btnUploadVideo->Enabled = true;
+				btnUploadImage->BackColor = System::Drawing::Color::FromArgb(255, 255, 192);
+				btnUploadVideo->BackColor = System::Drawing::Color::FromArgb(255, 255, 192);
+				
+				MessageBox::Show(
+					"✅ Template loaded successfully!\n\n" +
+					"Parking slot detection is now active.\n" +
+					"Violations will be marked in RED.\n\n" +
+					"You can now upload Image or Video.",
+					"Success", 
+					MessageBoxButtons::OK, 
+					MessageBoxIcon::Information
+				);
 			}
 			else MessageBox::Show("Failed to load!", "Error", MessageBoxButtons::OK, MessageBoxIcon::Error);
 		}
@@ -1480,7 +1534,7 @@ namespace ConsoleApplication3 {
 		if (g_cap_offline && g_cap_offline->isOpened()) {
 			double frameCount = g_cap_offline->get(cv::CAP_PROP_FRAME_COUNT);
 			totalFrames = (long long)frameCount;
-			trackBar1->Minimum = 0;
+						trackBar1->Minimum = 0;
 			trackBar1->Maximum = (int)((totalFrames > 0) ? totalFrames - 1 : 0);
 			trackBar1->Value = 0;
 		}

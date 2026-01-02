@@ -573,6 +573,10 @@ namespace ConsoleApplication3 {
 			violationsList_online = gcnew System::Collections::Generic::List<ViolationRecord_Online^>();
 			violatingCarTimers_online = gcnew System::Collections::Generic::Dictionary<int, System::DateTime>();
 
+			// [UI FIX] Disable Live Camera until template is loaded
+			btnLiveCamera->Enabled = false;
+			btnLiveCamera->BackColor = System::Drawing::Color::Gray;
+
 			BackgroundWorker^ modelLoader = gcnew BackgroundWorker();
 			modelLoader->DoWork += gcnew DoWorkEventHandler(this, &UploadForm::LoadModel_DoWork);
 			modelLoader->RunWorkerCompleted += gcnew RunWorkerCompletedEventHandler(this, &UploadForm::LoadModel_Completed);
@@ -1084,9 +1088,9 @@ private: System::Windows::Forms::Label^ label1;
 	private: System::Void LoadModel_Completed(System::Object^ sender, RunWorkerCompletedEventArgs^ e) {
 		if (e->Result != nullptr && e->Result->GetType() == bool::typeid && safe_cast<bool>(e->Result)) {
 			this->Text = L"Online Mode - YOLO Detection (Ready)";
-			btnLiveCamera->Enabled = true;
+			// [UI FIX] Only enable template button, Live Camera stays disabled
 			btnLoadParkingTemplate->Enabled = true;
-			MessageBox::Show("Model loaded!", "Success", MessageBoxButtons::OK, MessageBoxIcon::Information);
+			MessageBox::Show("Model loaded!\n\n⚠️ Please load a parking template before starting live camera.", "Success", MessageBoxButtons::OK, MessageBoxIcon::Information);
 		}
 		else {
 			MessageBox::Show("Error loading model", "Error", MessageBoxButtons::OK, MessageBoxIcon::Error);
@@ -1212,6 +1216,22 @@ private: System::Void processingWorker_DoWork(System::Object^ sender, DoWorkEven
 }
 
 private: System::Void btnLiveCamera_Click(System::Object^ sender, System::EventArgs^ e) {
+	// [UI FIX] Check if template is loaded before proceeding
+	if (!g_parkingEnabled_online.load() || !g_pm_logic_online || !g_pm_display_online) {
+		MessageBox::Show(
+			"⚠️ Parking template not loaded!\n\n" +
+			"Please click 'Load Template' button first before starting live camera.\n\n" +
+			"Steps:\n" +
+			"1. Click 'Load Template' button\n" +
+			"2. Select a parking template (.xml file)\n" +
+			"3. Then start Live Camera",
+			"Template Required",
+			MessageBoxButtons::OK,
+			MessageBoxIcon::Warning
+		);
+		return;
+	}
+
 	StopProcessing();
 	
 	Form^ ipForm = gcnew Form();
@@ -1430,8 +1450,20 @@ private: System::Void btnLoadParkingTemplate_Click(System::Object^ sender, Syste
 		std::string fileName = msclr::interop::marshal_as<std::string>(ofd->FileName);
 		if (LoadParkingTemplate_Online(fileName)) {
 			chkParkingMode->Checked = true;
-			MessageBox::Show("Template loaded!\n\nParking slot detection is now active.\nViolations (cars parked outside slots) will be marked in RED.", 
-				"Success", MessageBoxButtons::OK, MessageBoxIcon::Information);
+			
+			// [UI FIX] Enable Live Camera button after successful template load
+			btnLiveCamera->Enabled = true;
+			btnLiveCamera->BackColor = System::Drawing::Color::Tomato;
+			
+			MessageBox::Show(
+				"✅ Template loaded successfully!\n\n" +
+				"Parking slot detection is now active.\n" +
+				"Violations (cars parked outside slots) will be marked in RED.\n\n" +
+				"You can now start Live Camera.", 
+				"Success", 
+				MessageBoxButtons::OK, 
+				MessageBoxIcon::Information
+			);
 		}
 		else {
 			MessageBox::Show("Failed to load template!", "Error", MessageBoxButtons::OK, MessageBoxIcon::Error);
