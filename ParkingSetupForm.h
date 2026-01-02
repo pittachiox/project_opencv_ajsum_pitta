@@ -30,6 +30,9 @@ namespace ConsoleApplication3 {
 
 			// ??????????????????? Templates ???????????
 			EnsureTemplateFolderExists();
+
+			// --- ตั้งค่าเริ่มต้นให้ปุ่มทำงานไม่ได้ (สีเทา) ---
+			SetActionButtonsEnabled(false);
 		}
 
 	protected:
@@ -616,6 +619,7 @@ namespace ConsoleApplication3 {
 			if (cap.isOpened()) {
 				cap >> *templateFrame;
 				if (!templateFrame->empty()) {
+					SetActionButtonsEnabled(true);
 					parkingManager->setTemplateFrame(*templateFrame);
 					UpdateDisplay();
 					lblStatus->Text = "Video loaded! Click to draw parking slots (Right-click to finish slot)";
@@ -929,6 +933,14 @@ namespace ConsoleApplication3 {
 	}
 
 	private: System::Void label3_Click(System::Object^ sender, System::EventArgs^ e) {
+	}
+
+
+	private: void SetActionButtonsEnabled(bool status) {
+		this->btnSaveTemplate->Enabled = status;
+		this->btnLoadTemplate->Enabled = status;
+		this->btnClearAll->Enabled = status;
+		// ปุ่ม Delete จะ Enable เฉพาะตอนเลือก Item ใน ListBox อยู่แล้วตาม Logic เดิม
 	}
 
 	private: System::Void listBoxSlots_SelectedIndexChanged(System::Object^ sender, System::EventArgs^ e) {
