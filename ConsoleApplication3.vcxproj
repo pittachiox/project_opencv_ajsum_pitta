@@ -204,6 +204,7 @@
   <ItemGroup>
     <None Include="BOTTLENECK_DETAILED_ANALYSIS.md" />
     <None Include="COMPLETE_REALITY_CHECK.md" />
+    <None Include="ConsoleApplication3_FIXED.vcxproj" />
     <None Include="fix_uploadform.ps1" />
     <None Include="IP_WEBCAM_FIX_GUIDE.md" />
     <None Include="OFFLINE_MODE_REFACTORING.md" />
