@@ -773,8 +773,19 @@ namespace ConsoleApplication3 {
 					cv::cvtColor(frame, frame, cv::COLOR_BGRA2BGR);
 				}
 
+				// [FIXED] Ensure templateFrame is properly cloned and set
 				*templateFrame = frame.clone();
+				
+				// Validate the frame was set correctly
+				if (templateFrame->empty()) {
+					MessageBox::Show("Error: Failed to set template frame from camera", "Error",
+						MessageBoxButtons::OK, MessageBoxIcon::Error);
+					btnLoadLive->Enabled = true;
+					return;
+				}
+				
 				parkingManager->setTemplateFrame(*templateFrame);
+				SetActionButtonsEnabled(true); // [FIXED] Enable save button
 				UpdateDisplay();
 				lblStatus->Text = "Camera feed loaded! Click to draw parking slots (Right-click to finish slot)";
 				MessageBox::Show("Camera feed loaded successfully!\n\nLeft-click: Add point\nRight-click: Finish current slot",
@@ -811,35 +822,43 @@ namespace ConsoleApplication3 {
 	}
 
 	private: System::Void btnSaveTemplate_Click(System::Object^ sender, System::EventArgs^ e) {
-		if (parkingManager->getSlots().empty()) {
-			MessageBox::Show("Please draw at least one parking slot!", "Error",
-				MessageBoxButtons::OK, MessageBoxIcon::Warning);
-			return;
-		}
+    // [FIXED] Check if template frame is loaded and not empty
+    if (templateFrame->empty()) {
+        MessageBox::Show("Please load an image/video/camera first before saving!", "Error",
+            MessageBoxButtons::OK, MessageBoxIcon::Warning);
+        return;
+    }
 
-		String^ templateName = txtTemplateName->Text->Trim();
-		if (String::IsNullOrEmpty(templateName)) {
-			MessageBox::Show("Please enter a template name!", "Error",
-				MessageBoxButtons::OK, MessageBoxIcon::Warning);
-			return;
-		}
+    if (parkingManager->getSlots().empty()) {
+        MessageBox::Show("Please draw at least one parking slot!", "Error",
+            MessageBoxButtons::OK, MessageBoxIcon::Warning);
+        return;
+    }
 
-		std::string filename = msclr::interop::marshal_as<std::string>(templateName);
-		std::string fullPath = GetTemplatePath(filename);
+    String^ templateName = txtTemplateName->Text->Trim();
+    if (String::IsNullOrEmpty(templateName)) {
+        MessageBox::Show("Please enter a template name!", "Error",
+            MessageBoxButtons::OK, MessageBoxIcon::Warning);
+        return;
+    }
 
-		std::string name = msclr::interop::marshal_as<std::string>(txtTemplateName->Text);
-		std::string desc = msclr::interop::marshal_as<std::string>(txtDescription->Text);
+    std::string filename = msclr::interop::marshal_as<std::string>(templateName);
+    std::string fullPath = GetTemplatePath(filename);
 
-		if (parkingManager->saveTemplate(fullPath, name, desc)) {
-			String^ msg = "Template saved successfully!\n\nFile: " + gcnew String(fullPath.c_str());
-			MessageBox::Show(msg, "Success", MessageBoxButtons::OK, MessageBoxIcon::Information);
-			lblStatus->Text = "Saved: " + gcnew String(fullPath.c_str());
-		}
-		else {
-			MessageBox::Show("Failed to save template!", "Error",
-				MessageBoxButtons::OK, MessageBoxIcon::Error);
-		}
-	}
+    std::string name = msclr::interop::marshal_as<std::string>(txtTemplateName->Text);
+    std::string desc = msclr::interop::marshal_as<std::string>(txtDescription->Text);
+
+    // [FIXED] Check if parkingManager successfully saved the template
+    if (parkingManager->saveTemplate(fullPath, name, desc)) {
+        String^ msg = "Template saved successfully!\n\nFile: " + gcnew String(fullPath.c_str());
+        MessageBox::Show(msg, "Success", MessageBoxButtons::OK, MessageBoxIcon::Information);
+        lblStatus->Text = "Saved: " + gcnew String(fullPath.c_str());
+    }
+    else {
+        MessageBox::Show("Failed to save template! Make sure the image is loaded properly and at least one parking slot is drawn.", "Error",
+            MessageBoxButtons::OK, MessageBoxIcon::Error);
+    }
+}
 
 	private: System::Void btnLoadTemplate_Click(System::Object^ sender, System::EventArgs^ e) {
 		OpenFileDialog^ ofd = gcnew OpenFileDialog();

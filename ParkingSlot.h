@@ -61,49 +61,68 @@ struct ParkingTemplate {
     
     // Save to file
     bool saveToFile(const std::string& filename) const {
-        cv::FileStorage fs(filename, cv::FileStorage::WRITE);
-        if (!fs.isOpened()) return false;
-        
-        fs << "name" << name;
-        fs << "description" << description;
-        fs << "imageWidth" << imageSize.width;
-        fs << "imageHeight" << imageSize.height;
-        fs << "slotCount" << (int)slots.size();
-        
-        for (size_t i = 0; i < slots.size(); i++) {
-            std::string prefix = "slot_" + std::to_string(i);
-            fs << (prefix + "_id") << slots[i].id;
-            fs << (prefix + "_points") << slots[i].polygon;
+        try {
+            // [FIXED] Validate imageSize before saving
+            if (imageSize.width <= 0 || imageSize.height <= 0) {
+                return false; // Invalid image size
+            }
+            
+            cv::FileStorage fs(filename, cv::FileStorage::WRITE);
+            if (!fs.isOpened()) {
+                return false; // Cannot open file for writing
+            }
+            
+            fs << "name" << name;
+            fs << "description" << description;
+            fs << "imageWidth" << imageSize.width;
+            fs << "imageHeight" << imageSize.height;
+            fs << "slotCount" << (int)slots.size();
+            
+            for (size_t i = 0; i < slots.size(); i++) {
+                std::string prefix = "slot_" + std::to_string(i);
+                fs << (prefix + "_id") << slots[i].id;
+                fs << (prefix + "_points") << slots[i].polygon;
+            }
+            
+            fs.release();
+            return true;
         }
-        
-        fs.release();
-        return true;
+        catch (...) {
+            return false; // Handle any exceptions
+        }
     }
     
     // Load from file
     bool loadFromFile(const std::string& filename) {
-        cv::FileStorage fs(filename, cv::FileStorage::READ);
-        if (!fs.isOpened()) return false;
-        
-        fs["name"] >> name;
-        fs["description"] >> description;
-        fs["imageWidth"] >> imageSize.width;
-        fs["imageHeight"] >> imageSize.height;
-        
-        int slotCount;
-        fs["slotCount"] >> slotCount;
-        
-        slots.clear();
-        for (int i = 0; i < slotCount; i++) {
-            std::string prefix = "slot_" + std::to_string(i);
-            ParkingSlot slot;
-            fs[prefix + "_id"] >> slot.id;
-            fs[prefix + "_points"] >> slot.polygon;
-            slots.push_back(slot);
+        try {
+            cv::FileStorage fs(filename, cv::FileStorage::READ);
+            if (!fs.isOpened()) {
+                return false;
+            }
+            
+            fs["name"] >> name;
+            fs["description"] >> description;
+            fs["imageWidth"] >> imageSize.width;
+            fs["imageHeight"] >> imageSize.height;
+            
+            int slotCount;
+            fs["slotCount"] >> slotCount;
+            
+            slots.clear();
+            for (int i = 0; i < slotCount; i++) {
+                std::string prefix = "slot_" + std::to_string(i);
+                ParkingSlot slot;
+                fs[prefix + "_id"] >> slot.id;
+                fs[prefix + "_points"] >> slot.polygon;
+                slots.push_back(slot);
+            }
+            
+            fs.release();
+            return true;
         }
-        
-        fs.release();
-        return true;
+        catch (...) {
+            return false;
+        }
     }
 };
 
@@ -170,11 +189,22 @@ public:
     
     // Save template
     bool saveTemplate(const std::string& filename, const std::string& name, const std::string& desc) {
+        // [FIXED] Ensure templateFrame is not empty before saving
+        if (templateFrame.empty()) {
+            return false; // Cannot save if templateFrame is empty
+        }
+        
         ParkingTemplate templ;
         templ.name = name;
         templ.description = desc;
         templ.slots = slots;
         templ.imageSize = templateFrame.size();
+        
+        // [FIXED] Double-check imageSize is valid
+        if (templ.imageSize.width <= 0 || templ.imageSize.height <= 0) {
+            return false; // Invalid image dimensions
+        }
+        
         return templ.saveToFile(filename);
     }
     

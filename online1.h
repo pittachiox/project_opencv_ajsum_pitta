@@ -221,15 +221,7 @@ static void InitGlobalModel(const std::string& modelPath) {
 		OutputDebugStringA("[INFO] Online mode with improved ByteTrack (90 frames tolerance)\n");
 
 		g_classes = {
-			"person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat", "traffic light",
-			"fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow",
-			"elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee",
-			"skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove", "skateboard", "surfboard",
-			"tennis racket", "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple",
-			"sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "couch",
-			"potted plant", "bed", "dining table", "toilet", "tv", "laptop", "mouse", "remote", "keyboard", "cell phone",
-			"microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase", "scissors", "teddy bear",
-			"hair drier", "toothbrush"
+			"bicycle", "car", "motorcycle", "bus", "train", "truck"
 		};
 
 		g_colors.clear();
@@ -334,7 +326,7 @@ static void ProcessFrameOnline(const cv::Mat& inputFrame, long long frameSeq) {
 				double max_class_score;
 				cv::minMaxLoc(scores, 0, &max_class_score, 0, &class_id);
 
-				if (max_class_score > CONF_THRESHOLD) {
+				if (max_class_score > CONF_THRESHOLD && class_id.x == 2) {
 					float x = data[0]; float y = data[1]; float w = data[2]; float h = data[3];
 					float left = (x - 0.5 * w - dw) / ratio;
 					float top = (y - 0.5 * h - dh) / ratio;
