@@ -95,10 +95,13 @@
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>WIN32;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\opencv\build\include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
-      <AdditionalDependencies />
-      <SubSystem>Console</SubSystem>
+      <AdditionalDependencies>opencv_world4120d.lib</AdditionalDependencies>
+      <SubSystem>Windows</SubSystem>
+      <EntryPointSymbol>Main</EntryPointSymbol>
+      <AdditionalLibraryDirectories>C:\opencv\build\x86\vc16\lib</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -107,10 +110,13 @@
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>WIN32;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>C:\opencv\build\include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
-      <AdditionalDependencies />
-      <SubSystem>Console</SubSystem>
+      <AdditionalDependencies>opencv_world4120.lib</AdditionalDependencies>
+      <SubSystem>Windows</SubSystem>
+      <EntryPointSymbol>Main</EntryPointSymbol>
+      <AdditionalLibraryDirectories>C:\opencv\build\x86\vc16\lib</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -122,7 +128,7 @@
       <AdditionalIncludeDirectories>C:\opencv\build\include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>opencv_world4120d.lib</AdditionalDependencies>
+      <AdditionalDependencies>opencv_world4120.lib</AdditionalDependencies>
       <SubSystem>Windows</SubSystem>
       <EntryPointSymbol>Main</EntryPointSymbol>
       <AdditionalLibraryDirectories>C:\opencv\build\x64\vc16\lib</AdditionalLibraryDirectories>
@@ -196,8 +202,18 @@
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
+    <None Include="BOTTLENECK_DETAILED_ANALYSIS.md" />
+    <None Include="COMPLETE_REALITY_CHECK.md" />
     <None Include="fix_uploadform.ps1" />
     <None Include="IP_WEBCAM_FIX_GUIDE.md" />
+    <None Include="OFFLINE_MODE_REFACTORING.md" />
+    <None Include="OPTIMIZATION_ANALYSIS.md" />
+    <None Include="PHASE1_COPYPASTE_CODE.md" />
+    <None Include="PHASE1_IMPLEMENTATION_GUIDE.md" />
+    <None Include="PHASE1_QUICK_REFERENCE.md" />
+    <None Include="PHASE1_SUMMARY.md" />
+    <None Include="REALITY_CHECK_SUMMARY.md" />
+    <None Include="STATUS_DASHBOARD.md" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

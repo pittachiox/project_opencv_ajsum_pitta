@@ -170,7 +170,7 @@ static void InitBackend(const std::string& modelPath) {
 		g_net_offline->setPreferableBackend(cv::dnn::DNN_BACKEND_OPENCV);
 		g_net_offline->setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
 		g_tracker_offline = new BYTETracker(90, 0.25f);
-		g_classes_offline = { "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat", "traffic light", "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow" };
+		g_classes_offline = { "person", "bicycle", "car", "motorcycle", "bus" };
 		g_colors_offline.clear();
 		for (size_t i = 0; i < 100; i++) g_colors_offline.push_back(cv::Scalar(rand() % 255, rand() % 255, rand() % 255));
 		g_modelReady_offline = true;
@@ -271,33 +271,20 @@ static void ProcessFrame(const cv::Mat& inputFrame, long long frameSeq) {
 		// [PHASE 2/3] Pointer arithmetic optimized loop
 		for (int i = 0; i < rows; i++) {
 			float* classes_scores = data + 4;
-
-			// [FIXED] Removed faulty heuristic that filtered out non-person objects
-			// [OPTIMIZATION] Manual loop is faster than cv::Mat overhead for finding max score
-			int classId = -1;
-			float maxScore = 0.0f;
-
-			// Safety check for dimensions
-			// [FIX] Use (std::min) to prevent macro collision with Windows headers
-			int max_k = (std::min)((int)g_classes_offline.size(), dimensions - 4);
-
-			for (int k = 0; k < max_k; k++) {
-				if (classes_scores[k] > maxScore) {
-					maxScore = classes_scores[k];
-					classId = k;
+			if (dimensions >= 4 + (int)g_classes_offline.size()) {
+				cv::Mat scores(1, (int)g_classes_offline.size(), CV_32FC1, classes_scores);
+				cv::Point class_id; double max_class_score;
+				cv::minMaxLoc(scores, 0, &max_class_score, 0, &class_id);
+				if (max_class_score > CONF_THRESH && class_id.x == 2) {
+					float x = data[0]; float y = data[1]; float w = data[2]; float h = data[3];
+					float left = (x - 0.5 * w - dw) / ratio; float top = (y - 0.5 * h - dh) / ratio;
+					float width = w / ratio; float height = h / ratio;
+					boxes.push_back(cv::Rect((int)left, (int)top, (int)width, (int)height));
+					confs.push_back((float)max_class_score);
+					class_ids.push_back(class_id.x);
 				}
 			}
-
-			if (maxScore > CONF_THRESH) {
-				float x = data[0]; float y = data[1]; float w = data[2]; float h = data[3];
-				float left = (x - 0.5 * w - dw) / ratio; float top = (y - 0.5 * h - dh) / ratio;
-				float width = w / ratio; float height = h / ratio;
-				boxes.push_back(cv::Rect((int)left, (int)top, (int)width, (int)height));
-				confs.push_back(maxScore);
-				class_ids.push_back(classId);
-			}
-
-			data += dimensions;
+		 data += dimensions;
 		}
 
 		std::vector<int> nms;
