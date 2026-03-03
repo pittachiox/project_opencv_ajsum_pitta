@@ -1,5 +1,10 @@
 ﻿#pragma once
 #define NOMINMAX // [FIX] Move to top to prevent Windows min/max macros clash
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <winsock2.h>
+#include <windows.h>
 #include <msclr/marshal_cppstd.h>
 #include <string>
 #include <vector>
@@ -8,6 +13,7 @@
 #include <direct.h>  // For _getcwd
 #include "BYTETracker.h"
 #include "ParkingSlot.h"
+#include "MjpegServer.h"  // [NEW] Added MjpegServer
 #include "ViolationDetailForm.h"
 
 #pragma managed(push, off)
@@ -43,6 +49,9 @@ static struct {
 	cv::Mat frame;
 	long long sequence;
 }g_latestFrameInfo;
+
+// *** [NEW] MJPEG SERVER ***
+static MjpegServer* g_mjpegServer_offline = nullptr;
 
 // Global Objects
 static AppState g_appState;
@@ -497,6 +506,8 @@ namespace ConsoleApplication3 {
 	using namespace System::Windows::Forms;
 	using namespace System::Drawing;
 	using namespace System::Threading;
+	using namespace System::Net;
+	using namespace System::Net::Sockets;
 
 	public ref class OfflineUploadForm : public System::Windows::Forms::Form
 	{
@@ -595,6 +606,9 @@ namespace ConsoleApplication3 {
 	private: System::Windows::Forms::Label^ label6;
 	private: System::Windows::Forms::Label^ label5;
 
+	// [NEW] Network Stream Label
+	private: System::Windows::Forms::Label^ lblNetworkStream;
+
 
 	private: System::Collections::Generic::Dictionary<int, System::DateTime>^ violatingCarTimers;
 
@@ -625,6 +639,7 @@ namespace ConsoleApplication3 {
 			   this->lblViolationCount = (gcnew System::Windows::Forms::Label());
 			   this->lblViolationTitle = (gcnew System::Windows::Forms::Label());
 			   this->panel1 = (gcnew System::Windows::Forms::Panel());
+			   this->lblNetworkStream = (gcnew System::Windows::Forms::Label());
 			   (cli::safe_cast<System::ComponentModel::ISupportInitialize^>(this->trackBar1))->BeginInit();
 			   (cli::safe_cast<System::ComponentModel::ISupportInitialize^>(this->splitContainer1))->BeginInit();
 			   this->splitContainer1->Panel1->SuspendLayout();
@@ -916,6 +931,18 @@ namespace ConsoleApplication3 {
 			   this->panel1->Name = L"panel1";
 			   this->panel1->Size = System::Drawing::Size(851, 484);
 			   this->panel1->TabIndex = 4;
+			   this->panel1->Controls->Add(this->lblNetworkStream);
+			   // 
+			   // lblNetworkStream
+			   // 
+			   this->lblNetworkStream->AutoSize = true;
+			   this->lblNetworkStream->Font = (gcnew System::Drawing::Font(L"Segoe UI", 10, System::Drawing::FontStyle::Bold));
+			   this->lblNetworkStream->ForeColor = System::Drawing::Color::White;
+			   this->lblNetworkStream->Location = System::Drawing::Point(300, 15);
+			   this->lblNetworkStream->Name = L"lblNetworkStream";
+			   this->lblNetworkStream->Size = System::Drawing::Size(120, 19);
+			   this->lblNetworkStream->TabIndex = 1;
+			   this->lblNetworkStream->Text = L"Stream: Offline";
 			   // 
 			   // OfflineUploadForm
 			   // 
@@ -1028,6 +1055,11 @@ namespace ConsoleApplication3 {
 							g_processedFrame_shared = renderedFrame.clone();
 							g_processedSeq_shared = currentSeq;
 							g_processedFramesCount++;
+
+							// [FIX] Update MJPEG Server inside the loop so it streams out!
+							if (g_mjpegServer_offline) {
+								g_mjpegServer_offline->SetLatestFrame(g_processedFrame_shared);
+							}
 						}
 					}
 
@@ -1155,6 +1187,19 @@ namespace ConsoleApplication3 {
 		readerThread->Start();
 
 		timer1->Start();
+
+		// *** [NEW] Start MJPEG Server ***
+		if (!g_mjpegServer_offline) {
+			g_mjpegServer_offline = new MjpegServer(8081); // using 8081 for offline mode to prevent conflict
+			if (g_mjpegServer_offline->Start()) {
+				std::string ip = GetLocalIP();
+				lblNetworkStream->Text = gcnew String(("Stream: http://" + ip + ":8081").c_str());
+			} else {
+				lblNetworkStream->Text = "Stream: Failed to start";
+				delete g_mjpegServer_offline;
+				g_mjpegServer_offline = nullptr;
+			}
+		}
 	}
 
 	private: void StopProcessing() {
@@ -1175,6 +1220,44 @@ namespace ConsoleApplication3 {
 			}
 			readerThread = nullptr;
 		}
+
+		// *** [NEW] Stop MJPEG Server ***
+		if (g_mjpegServer_offline) {
+			g_mjpegServer_offline->Stop();
+			delete g_mjpegServer_offline;
+			g_mjpegServer_offline = nullptr;
+		}
+		
+		if (lblNetworkStream) lblNetworkStream->Text = "Stream: Offline";
+	}
+
+	// *** [NEW] Get Local IP helper ***
+	private: std::string GetLocalIP() {
+		System::String^ bestIP = "127.0.0.1";
+		try {
+			cli::array<System::Net::NetworkInformation::NetworkInterface^>^ interfaces = System::Net::NetworkInformation::NetworkInterface::GetAllNetworkInterfaces();
+			for each (System::Net::NetworkInformation::NetworkInterface^ adapter in interfaces) {
+				if (adapter->OperationalStatus == System::Net::NetworkInformation::OperationalStatus::Up) {
+					System::String^ desc = adapter->Description->ToLower();
+					// Skip VPNs, VMware, VirtualBox, Radmin
+					if (desc->Contains("virtual") || desc->Contains("vpn") || desc->Contains("vmware") || desc->Contains("radmin") || desc->Contains("hamachi")) continue;
+					
+					System::Net::NetworkInformation::IPInterfaceProperties^ properties = adapter->GetIPProperties();
+					for each (System::Net::NetworkInformation::UnicastIPAddressInformation^ ip in properties->UnicastAddresses) {
+						if (ip->Address->AddressFamily == System::Net::Sockets::AddressFamily::InterNetwork) {
+							System::String^ ipStr = ip->Address->ToString();
+							if (ipStr->StartsWith("26.") || ipStr->StartsWith("169.254.")) continue;
+							bestIP = ipStr;
+							// Prefer physical connections that look like classic local IPs
+							if (ipStr->StartsWith("192.168.") || ipStr->StartsWith("172.") || ipStr->StartsWith("10.")) {
+								return msclr::interop::marshal_as<std::string>(bestIP);
+							}
+						}
+					}
+				}
+			}
+		} catch (...) {}
+		return msclr::interop::marshal_as<std::string>(bestIP);
 	}
 
 	private: System::Void LoadModel_DoWork(System::Object^ sender, DoWorkEventArgs^ e) {
@@ -1227,6 +1310,12 @@ namespace ConsoleApplication3 {
 				cv::Mat result;
 				DrawScene(img, 999999, result);
 				UpdatePictureBox(result);
+				
+				// [NEW] Update mjpeg stream
+				if (g_mjpegServer_offline) {
+					g_mjpegServer_offline->SetLatestFrame(result);
+				}
+				
 				MessageBox::Show("Image loaded and processed successfully!", "Success", MessageBoxButtons::OK, MessageBoxIcon::Information);
 			}
 			else {
