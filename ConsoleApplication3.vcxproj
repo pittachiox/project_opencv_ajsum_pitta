@@ -202,8 +202,10 @@
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
+    <None Include="ANALYSIS_SUMMARY.md" />
     <None Include="BOTTLENECK_DETAILED_ANALYSIS.md" />
     <None Include="COMPLETE_REALITY_CHECK.md" />
+    <None Include="ConsoleApplication3_FIXED.vcxproj" />
     <None Include="fix_uploadform.ps1" />
     <None Include="IP_WEBCAM_FIX_GUIDE.md" />
     <None Include="OFFLINE_MODE_REFACTORING.md" />
@@ -214,6 +216,8 @@
     <None Include="PHASE1_SUMMARY.md" />
     <None Include="REALITY_CHECK_SUMMARY.md" />
     <None Include="STATUS_DASHBOARD.md" />
+    <None Include="SYNC_AND_BUILD_CHECKLIST.md" />
+    <None Include="TECHNICAL_VERIFICATION_GUIDE.md" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
