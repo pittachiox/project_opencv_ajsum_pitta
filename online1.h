@@ -1,5 +1,10 @@
 ﻿#pragma once
 #define NOMINMAX // [PHASE 1 FIX] Move to top BEFORE any includes
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <winsock2.h>
+#include <windows.h>
 #include <msclr/marshal_cppstd.h>
 #include <string>
 #include <vector>
@@ -7,6 +12,7 @@
 #include <direct.h>  // For _getcwd
 #include "BYTETracker.h"
 #include "ParkingSlot.h"
+#include "MjpegServer.h"  // [NEW] Added MjpegServer
 #include "ViolationDetailForm.h"
 
 #pragma managed(push, off)
@@ -72,6 +78,9 @@ static cv::Mat g_drawingBuffer_online; // Memory Pool
 static cv::Mat g_processedFrame_online;
 static long long g_processedSeq_online = 0;
 static std::mutex g_processedMutex_online;
+
+// *** [NEW] MJPEG SERVER ***
+static MjpegServer* g_mjpegServer_online = nullptr;
 
 // *** [PHASE 2] PERFORMANCE OPTIMIZATION ***
 static std::chrono::steady_clock::time_point g_lastViolationCheck_online = std::chrono::steady_clock::now();
@@ -549,6 +558,8 @@ namespace ConsoleApplication3 {
 	using namespace System::Windows::Forms;
 	using namespace System::Drawing;
 	using namespace System::Threading;
+	using namespace System::Net;
+	using namespace System::Net::Sockets;
 
 	public ref class UploadForm : public System::Windows::Forms::Form
 	{
@@ -640,6 +651,15 @@ private: System::Windows::Forms::Label^ label1;
 	private: System::Windows::Forms::Button^ btnClearViolations_online;
 	private: System::Collections::Generic::Dictionary<int, System::DateTime>^ violatingCarTimers_online;
 
+	// [NEW] Background mode controls
+	private: System::Windows::Forms::Button^ btnRunInBackground;
+	private: System::Windows::Forms::NotifyIcon^ notifyIcon;
+	private: System::Windows::Forms::ContextMenuStrip^ trayMenu;
+	private: System::Windows::Forms::ToolStripMenuItem^ menuShow;
+	private: System::Windows::Forms::ToolStripMenuItem^ menuExit;
+	private: System::Windows::Forms::Label^ lblNetworkStream;
+	private: bool isBackgroundMode = false;
+
 #pragma region Windows Form Designer generated code
 		   void InitializeComponent(void)
 		   {
@@ -667,6 +687,15 @@ private: System::Windows::Forms::Label^ label1;
 			   this->lblViolationTitle_online = (gcnew System::Windows::Forms::Label());
 			   this->splitContainer1 = (gcnew System::Windows::Forms::SplitContainer());
 			   this->label1 = (gcnew System::Windows::Forms::Label());
+			   
+			   // Background additions
+			   this->btnRunInBackground = (gcnew System::Windows::Forms::Button());
+			   this->notifyIcon = (gcnew System::Windows::Forms::NotifyIcon(this->components));
+			   this->trayMenu = (gcnew System::Windows::Forms::ContextMenuStrip(this->components));
+			   this->menuShow = (gcnew System::Windows::Forms::ToolStripMenuItem());
+			   this->menuExit = (gcnew System::Windows::Forms::ToolStripMenuItem());
+			   this->lblNetworkStream = (gcnew System::Windows::Forms::Label());
+
 			   (cli::safe_cast<System::ComponentModel::ISupportInitialize^>(this->pictureBox1))->BeginInit();
 			   (cli::safe_cast<System::ComponentModel::ISupportInitialize^>(this->splitContainer1))->BeginInit();
 			   this->splitContainer1->Panel1->SuspendLayout();
@@ -908,6 +937,8 @@ private: System::Windows::Forms::Label^ label1;
 			   // splitContainer1.Panel2
 			   // 
 			   this->splitContainer1->Panel2->BackColor = System::Drawing::Color::LightSteelBlue;
+			   this->splitContainer1->Panel2->Controls->Add(this->btnRunInBackground);
+			   this->splitContainer1->Panel2->Controls->Add(this->lblNetworkStream);
 			   this->splitContainer1->Panel2->Controls->Add(this->pnlViolationContainer_online);
 			   this->splitContainer1->Panel2->Controls->Add(this->label7_online);
 			   this->splitContainer1->Panel2->Controls->Add(this->label6_online);
@@ -934,6 +965,63 @@ private: System::Windows::Forms::Label^ label1;
 			   this->label1->Size = System::Drawing::Size(102, 30);
 			   this->label1->TabIndex = 6;
 			   this->label1->Text = L"camera1";
+			   // 
+			   // btnRunInBackground
+			   // 
+			   this->btnRunInBackground->BackColor = System::Drawing::Color::FromArgb(static_cast<System::Int32>(static_cast<System::Byte>(155)), static_cast<System::Int32>(static_cast<System::Byte>(89)), static_cast<System::Int32>(static_cast<System::Byte>(182)));
+			   this->btnRunInBackground->FlatAppearance->BorderSize = 0;
+			   this->btnRunInBackground->FlatStyle = System::Windows::Forms::FlatStyle::Flat;
+			   this->btnRunInBackground->Font = (gcnew System::Drawing::Font(L"Segoe UI", 10, System::Drawing::FontStyle::Bold));
+			   this->btnRunInBackground->ForeColor = System::Drawing::Color::White;
+			   this->btnRunInBackground->Location = System::Drawing::Point(37, 410); // [FIX] Changed Y from 910
+			   this->btnRunInBackground->Name = L"btnRunInBackground";
+			   this->btnRunInBackground->Size = System::Drawing::Size(352, 35);
+			   this->btnRunInBackground->TabIndex = 11;
+			   this->btnRunInBackground->Text = L"⬇️ Run in Background";
+			   this->btnRunInBackground->UseVisualStyleBackColor = false;
+			   this->btnRunInBackground->Click += gcnew System::EventHandler(this, &UploadForm::btnRunInBackground_Click);
+			   this->btnRunInBackground->Enabled = false;
+			   // 
+			   // trayMenu
+			   // 
+			   this->trayMenu->Items->AddRange(gcnew cli::array< System::Windows::Forms::ToolStripItem^  >(2) {
+				   this->menuShow,
+					   this->menuExit
+			   });
+			   this->trayMenu->Name = L"trayMenu";
+			   this->trayMenu->Size = System::Drawing::Size(104, 48);
+			   // 
+			   // menuShow
+			   // 
+			   this->menuShow->Name = L"menuShow";
+			   this->menuShow->Size = System::Drawing::Size(103, 22);
+			   this->menuShow->Text = L"Show";
+			   this->menuShow->Click += gcnew System::EventHandler(this, &UploadForm::menuShow_Click);
+			   // 
+			   // menuExit
+			   // 
+			   this->menuExit->Name = L"menuExit";
+			   this->menuExit->Size = System::Drawing::Size(103, 22);
+			   this->menuExit->Text = L"Exit";
+			   this->menuExit->Click += gcnew System::EventHandler(this, &UploadForm::menuExit_Click);
+			   // 
+			   // notifyIcon
+			   // 
+			   this->notifyIcon->ContextMenuStrip = this->trayMenu;
+			   this->notifyIcon->Text = L"Smart Parking Monitoring";
+			   this->notifyIcon->Visible = false;
+			   this->notifyIcon->DoubleClick += gcnew System::EventHandler(this, &UploadForm::notifyIcon_DoubleClick);
+			   // 
+			   // lblNetworkStream
+			   // 
+			   this->lblNetworkStream->AutoSize = true;
+			   this->lblNetworkStream->Font = (gcnew System::Drawing::Font(L"Segoe UI", 10, System::Drawing::FontStyle::Bold));
+			   this->lblNetworkStream->ForeColor = System::Drawing::Color::DarkGreen;
+			   this->lblNetworkStream->Location = System::Drawing::Point(100, 100); // [FIX] Position it reasonably under the other buttons
+			   this->lblNetworkStream->Name = L"lblNetworkStream";
+			   this->lblNetworkStream->Size = System::Drawing::Size(120, 19);
+			   this->lblNetworkStream->TabIndex = 1;
+			   this->lblNetworkStream->Text = L"Stream: Offline";
 			   // 
 			   // UploadForm
 			   // 
@@ -1008,6 +1096,8 @@ private: System::Windows::Forms::Label^ label1;
 
 	// *** [OPTIMIZED] UI TIMER - หยิบภาพมาโชว์อย่างเดียว (0.1ms) ***
 	private: System::Void timer1_Tick(System::Object^ sender, System::EventArgs^ e) {
+		if (isBackgroundMode) return; // [NEW] Skip updating UI if in background
+
 		try {
 			cv::Mat finalFrame;
 			long long seq = 0;
@@ -1066,6 +1156,16 @@ private: System::Windows::Forms::Label^ label1;
 		isProcessing = false;
 		timer1->Stop();
 		if (processingWorker->IsBusy) processingWorker->CancelAsync();
+
+		// *** [NEW] Stop MJPEG Server ***
+		if (g_mjpegServer_online) {
+			g_mjpegServer_online->Stop();
+			delete g_mjpegServer_online;
+			g_mjpegServer_online = nullptr;
+		}
+
+		if (btnRunInBackground) btnRunInBackground->Enabled = false;
+		if (lblNetworkStream) lblNetworkStream->Text = "Stream: Offline";
 	}
 
 	private: System::Void LoadModel_DoWork(System::Object^ sender, DoWorkEventArgs^ e) {
@@ -1087,6 +1187,35 @@ private: System::Windows::Forms::Label^ label1;
 		else {
 			MessageBox::Show("Error loading model", "Error", MessageBoxButtons::OK, MessageBoxIcon::Error);
 		}
+	}
+
+	// *** [NEW] Get Local IP helper ***
+	private: std::string GetLocalIP() {
+		System::String^ bestIP = "127.0.0.1";
+		try {
+			cli::array<System::Net::NetworkInformation::NetworkInterface^>^ interfaces = System::Net::NetworkInformation::NetworkInterface::GetAllNetworkInterfaces();
+			for each (System::Net::NetworkInformation::NetworkInterface^ adapter in interfaces) {
+				if (adapter->OperationalStatus == System::Net::NetworkInformation::OperationalStatus::Up) {
+					System::String^ desc = adapter->Description->ToLower();
+					// Skip VPNs, VMware, VirtualBox, Radmin
+					if (desc->Contains("virtual") || desc->Contains("vpn") || desc->Contains("vmware") || desc->Contains("radmin") || desc->Contains("hamachi")) continue;
+					
+					System::Net::NetworkInformation::IPInterfaceProperties^ properties = adapter->GetIPProperties();
+					for each (System::Net::NetworkInformation::UnicastIPAddressInformation^ ip in properties->UnicastAddresses) {
+						if (ip->Address->AddressFamily == System::Net::Sockets::AddressFamily::InterNetwork) {
+							System::String^ ipStr = ip->Address->ToString();
+							if (ipStr->StartsWith("26.") || ipStr->StartsWith("169.254.")) continue;
+							bestIP = ipStr;
+							// Prefer physical connections that look like classic local IPs
+							if (ipStr->StartsWith("192.168.") || ipStr->StartsWith("172.") || ipStr->StartsWith("10.")) {
+								return msclr::interop::marshal_as<std::string>(bestIP);
+							}
+						}
+					}
+				}
+			}
+		} catch (...) {}
+		return msclr::interop::marshal_as<std::string>(bestIP);
 	}
 
 	private: void StartProcessing() {
@@ -1115,6 +1244,21 @@ private: System::Windows::Forms::Label^ label1;
 		}
 
 		timer1->Start();
+		
+		btnRunInBackground->Enabled = true;
+
+		// *** [NEW] Start MJPEG Server ***
+		if (!g_mjpegServer_online) {
+			g_mjpegServer_online = new MjpegServer(8080);
+			if (g_mjpegServer_online->Start()) {
+				std::string ip = GetLocalIP();
+				lblNetworkStream->Text = gcnew String(("Stream: http://" + ip + ":8080").c_str());
+			} else {
+				lblNetworkStream->Text = "Stream: Failed to start";
+				delete g_mjpegServer_online;
+				g_mjpegServer_online = nullptr;
+			}
+		}
 	}
 
 	private: void CameraReaderLoop() {
@@ -1169,6 +1313,11 @@ private: System::Windows::Forms::Label^ label1;
 						g_processedFrame_online = renderedFrame; // [FIX] Shallow copy
 						g_processedSeq_online = currentSeq;
 						g_processedFramesCount_online++;
+
+						// [FIX] Update MJPEG Server inside the loop so it streams out!
+						if (g_mjpegServer_online) {
+							g_mjpegServer_online->SetLatestFrame(g_processedFrame_online);
+						}
 					}
 				}
 
@@ -1660,6 +1809,49 @@ private: void CheckViolations_Online(cv::Mat& currentFrame) {
 		else {
 			lblLogs->Text = L"logs 25/12/67";
 		}
+	}
+
+	// *** [NEW] BACKGROUND MODE LOGIC ***
+	private: System::Void btnRunInBackground_Click(System::Object^ sender, System::EventArgs^ e) {
+		this->Hide();
+		isBackgroundMode = true;
+		notifyIcon->Visible = true;
+		
+		// Set notification icon if available, otherwise use a default icon
+		try {
+			notifyIcon->Icon = gcnew System::Drawing::Icon("app.ico");
+		} catch (...) {
+			notifyIcon->Icon = SystemIcons::Application;
+		}
+
+		// Show the stream URL if it's available
+		System::String^ balloonText = "Application is running in the background. MJPEG Stream is active.";
+		if (lblNetworkStream != nullptr && lblNetworkStream->Text->StartsWith("Stream: http")) {
+			balloonText += "\n" + lblNetworkStream->Text;
+		}
+
+		notifyIcon->ShowBalloonTip(3000, "Smart Parking", balloonText, ToolTipIcon::Info);
+	}
+
+	private: System::Void notifyIcon_DoubleClick(System::Object^ sender, System::EventArgs^ e) {
+		RestoreFromBackground();
+	}
+
+	private: System::Void menuShow_Click(System::Object^ sender, System::EventArgs^ e) {
+		RestoreFromBackground();
+	}
+
+	private: System::Void RestoreFromBackground() {
+		this->Show();
+		this->WindowState = FormWindowState::Normal;
+		isBackgroundMode = false;
+		notifyIcon->Visible = false;
+	}
+
+	private: System::Void menuExit_Click(System::Object^ sender, System::EventArgs^ e) {
+		// Stop processing cleanly before exiting
+		StopProcessing();
+		this->Close();
 	}
 };
 }
