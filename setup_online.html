@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Camera Setup - Smart Parking</title>
+    <style>
+        :root {
+            --bg-color: #121212;
+            --panel-bg: #1e1e1e;
+            --primary-color: #4caff0;
+            --text-main: #ffffff;
+            --text-muted: #a0a0a0;
+            --border-radius: 12px;
+            --success-color: #28a745;
+            --error-color: #dc3545;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .header {
+            width: 100%;
+            max-width: 600px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 30px;
+            position: relative;
+        }
+
+        .back-btn {
+            position: absolute;
+            left: 0;
+            top: 0;
+            color: var(--primary-color);
+            text-decoration: none;
+            font-weight: bold;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 600;
+        }
+
+        .header p {
+            color: var(--text-muted);
+            margin-top: 5px;
+        }
+
+        .setup-card {
+            background: var(--panel-bg);
+            border-radius: var(--border-radius);
+            padding: 30px;
+            width: 100%;
+            max-width: 500px;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 12px;
+            background: #2a2a2a;
+            border: 1px solid #444;
+            border-radius: 6px;
+            color: white;
+            font-size: 16px;
+            transition: border-color 0.2s;
+            box-sizing: border-box;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: var(--primary-color);
+        }
+
+        .help-text {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 6px;
+        }
+
+        .btn-connect {
+            width: 100%;
+            padding: 14px;
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .btn-connect:hover {
+            background: #3a9fd0;
+        }
+
+        /* ============ Popup Modal ============ */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background: var(--panel-bg);
+            width: 100%;
+            max-width: 500px;
+            border-radius: var(--border-radius);
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .modal-title {
+            font-size: 20px;
+            font-weight: bold;
+            margin: 0;
+            text-align: center;
+        }
+
+        .log-box {
+            background: #0f0f0f;
+            border: 1px solid #333;
+            border-radius: 6px;
+            padding: 12px;
+            height: 180px;
+            overflow-y: auto;
+            font-family: Consolas, monospace;
+            font-size: 13px;
+            color: #ccc;
+        }
+
+        .log-box .info {
+            color: #4caff0;
+        }
+
+        .log-box .success {
+            color: var(--success-color);
+            font-weight: bold;
+        }
+
+        .log-box .error {
+            color: var(--error-color);
+            font-weight: bold;
+        }
+
+        .log-box div {
+            margin-bottom: 6px;
+            border-bottom: 1px solid #222;
+            padding-bottom: 4px;
+        }
+
+        .preview-container {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .preview-item {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            display: none;
+        }
+
+        .preview-label {
+            font-size: 12px;
+            color: #888;
+            margin-bottom: 5px;
+        }
+
+        .preview-img {
+            width: 100%;
+            border-radius: 6px;
+            border: 1px solid #444;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .modal-btn {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+            text-align: center;
+            text-decoration: none;
+            color: white;
+        }
+
+        .btn-cancel {
+            background: #555;
+        }
+
+        .btn-cancel:hover {
+            background: #666;
+        }
+
+        .btn-proceed {
+            background: var(--success-color);
+            display: none;
+        }
+
+        .btn-proceed:hover {
+            background: #218838;
+        }
+
+        .logs-spinner {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s linear infinite;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="header">
+        <a href="/camera" class="back-btn">← Back</a>
+        <h1>Live Camera Setup</h1>
+        <p>Connect to an IP Camera or Mobile Stream</p>
+    </div>
+
+    <div class="setup-card">
+        <form id="setupForm">
+            <div class="form-group">
+                <label>IP Address</label>
+                <input type="text" id="ipInput" class="form-control" placeholder="192.168.1.100" value="192.168.1.100"
+                    required>
+            </div>
+            <div class="form-group">
+                <label>Port</label>
+                <input type="text" id="portInput" class="form-control" placeholder="8080" value="8080" required>
+            </div>
+            <div class="form-group">
+                <label>Stream Path</label>
+                <input type="text" id="pathInput" class="form-control" placeholder="/video" value="/video">
+                <div class="help-text">Example apps: IP Webcam, DroidCam. Devices must be on same WiFi.</div>
+            </div>
+            <button type="submit" class="btn-connect">Connect Server</button>
+        </form>
+        <div style="margin-top: 15px; text-align: center;">
+            <p style="color: #888; font-size: 14px; margin-bottom: 10px;">— OR —</p>
+            <button type="button" class="btn-connect" style="background: #444;"
+                onclick="document.getElementById('fileInput').click()">Upload Parking Template (.xml) File</button>
+            <input type="file" id="fileInput" accept=".xml" style="display: none;">
+
+            <p style="color: #888; font-size: 14px; margin: 15px 0 10px;">— OR PASTE XML —</p>
+            <textarea id="xmlInput" class="form-control" placeholder="<opencv_storage>..."
+                style="height: 100px; resize: vertical; margin-bottom: 10px; font-family: monospace; font-size: 12px;"></textarea>
+            <button type="button" class="btn-connect" style="background: #555;" id="btnPasteXml">Apply Pasted
+                XML</button>
+        </div>
+    </div>
+
+    <!-- Modal Popup for Logs -->
+    <div class="modal-overlay" id="logModal">
+        <div class="modal-content">
+            <h3 class="modal-title" id="modalTitle">Connecting...</h3>
+
+            <div class="log-box" id="logBox"></div>
+
+            <div class="preview-container" id="previewContainer">
+                <div class="preview-item" id="rawPreviewItem">
+                    <div class="preview-label">Raw Camera Feed</div>
+                    <img id="rawPreviewImg" class="preview-img" alt="Raw Preview">
+                </div>
+                <div class="preview-item" id="aiPreviewItem">
+                    <div class="preview-label">AI Processed Feed</div>
+                    <img id="aiPreviewImg" class="preview-img" alt="AI Preview">
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" class="modal-btn btn-cancel" id="btnCancel">Cancel</button>
+                <a href="/dashboard" class="modal-btn btn-proceed" id="btnProceed">Go to Dashboard →</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const modal = document.getElementById('logModal');
+        const logBox = document.getElementById('logBox');
+        const btnCancel = document.getElementById('btnCancel');
+        const btnProceed = document.getElementById('btnProceed');
+        const rawPreviewItem = document.getElementById('rawPreviewItem');
+        const aiPreviewItem = document.getElementById('aiPreviewItem');
+        const rawPreviewImg = document.getElementById('rawPreviewImg');
+        const aiPreviewImg = document.getElementById('aiPreviewImg');
+        const modalTitle = document.getElementById('modalTitle');
+        let pollInterval = null;
+        let pollAttempts = 0;
+        const MAX_ATTEMPTS = 30; // 30 * 500ms = 15 seconds timeout
+        let rawConnected = false;
+        let aiConnected = false;
+
+        function appendLog(msg, type = '') {
+            const div = document.createElement('div');
+            div.className = type;
+
+            const time = new Date().toLocaleTimeString([], { hour12: false });
+            let innerHtml = `[${time}] ${msg}`;
+            if (type === 'spin') {
+                innerHtml = `<span class="logs-spinner"></span>` + innerHtml;
+            }
+
+            div.innerHTML = innerHtml;
+            logBox.appendChild(div);
+            logBox.scrollTop = logBox.scrollHeight;
+        }
+
+        document.getElementById('setupForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const ip = document.getElementById('ipInput').value.trim();
+            const port = document.getElementById('portInput').value.trim();
+            const path = document.getElementById('pathInput').value.trim();
+
+            // Reset modal state
+            logBox.innerHTML = '';
+            rawPreviewItem.style.display = 'none';
+            aiPreviewItem.style.display = 'none';
+            btnProceed.style.display = 'none';
+            modalTitle.textContent = 'Connecting...';
+            pollAttempts = 0;
+            rawConnected = false;
+            aiConnected = false;
+            modal.style.display = 'flex';
+
+            appendLog(`Commanding local server to connect to camera at ${ip}:${port}${path}...`, 'info');
+
+            // 1. Send connection request to backend
+            fetch('/api/connect_online', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ip, port, path })
+            })
+                .then(res => {
+                    if (res.ok) {
+                        appendLog('Request sent. Waiting for camera response...', 'spin');
+                        startPolling();
+                    } else {
+                        appendLog(`Server returned error: ${res.status}`, 'error');
+                        modalTitle.textContent = 'Connection Failed';
+                    }
+                })
+                .catch(err => {
+                    appendLog(`Failed to reach server: ${err.message}`, 'error');
+                    modalTitle.textContent = 'Connection Failed';
+                });
+        });
+
+        // 2. Poll for frames to verify connection
+        function startPolling() {
+            if (pollInterval) clearInterval(pollInterval);
+
+            pollInterval = setInterval(() => {
+                pollAttempts++;
+
+                // Try fetching raw_frame first to see if OpenCV got a frame
+                const rawUrl = '/api/raw_frame?t=' + Date.now();
+                fetch(rawUrl)
+                    .then(res => {
+                        if (res.ok) {
+                            if (!rawConnected) {
+                                rawConnected = true;
+                                rawPreviewImg.src = rawUrl;
+                                rawPreviewItem.style.display = 'flex';
+                                modalTitle.textContent = 'Camera Connected!';
+                                appendLog('Camera connected successfully! Waiting for AI...', 'success');
+                                btnProceed.style.display = 'block';
+                                btnCancel.textContent = 'Close';
+                            } else {
+                                rawPreviewImg.src = rawUrl;
+                            }
+
+                            // Once raw is connected, check AI processed frame
+                            const aiUrl = '/api/current_frame?t=' + Date.now();
+                            fetch(aiUrl).then(aiRes => {
+                                if (aiRes.ok) {
+                                    aiPreviewImg.src = aiUrl;
+                                    aiPreviewItem.style.display = 'flex';
+                                    if (!aiConnected) {
+                                        aiConnected = true;
+                                        appendLog('AI Processing active!', 'success');
+                                    }
+                                }
+                            }).catch(() => { });
+
+                        } else if (res.status === 404 || res.status === 503) {
+                            if (pollAttempts >= MAX_ATTEMPTS) {
+                                clearInterval(pollInterval);
+                                appendLog('Connection timed out after 15 seconds.', 'error');
+                                appendLog('Please verify the IP, port, and network stream path are correct. Check if the camera is online.', '');
+                                modalTitle.textContent = 'Timeout Error';
+                                const lastSpin = logBox.querySelector('.logs-spinner');
+                                if (lastSpin) lastSpin.remove();
+                            } else if (pollAttempts % 4 === 0) {
+                                appendLog('Still waiting for stream...', 'spin');
+                            }
+                        }
+                    })
+                    .catch(() => {
+                        if (pollAttempts >= MAX_ATTEMPTS) {
+                            clearInterval(pollInterval);
+                            appendLog('Connection timed out.', 'error');
+                            modalTitle.textContent = 'Timeout Error';
+                        }
+                    });
+            }, 500); // Poll every 500ms
+        }
+
+        btnCancel.addEventListener('click', () => {
+            modal.style.display = 'none';
+            if (pollInterval) clearInterval(pollInterval);
+        });
+
+        // Handle Template Upload
+        document.getElementById('fileInput').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function (event) {
+                const xmlContent = event.target.result;
+                fetch('/api/save_template', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/xml' },
+                    body: xmlContent
+                })
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.status === 'success') {
+                            alert('Template uploaded successfully! You can now draw parking spaces using this template.');
+                        } else {
+                            alert('Error uploading template.');
+                        }
+                    })
+                    .catch(err => {
+                        alert('Network error while uploading template: ' + err.message);
+                    });
+            };
+            reader.readAsText(file);
+            // Reset file input so user can upload same file again if needed
+            e.target.value = '';
+        });
+
+        // Handle XML Paste
+        document.getElementById('btnPasteXml').addEventListener('click', () => {
+            const xmlContent = document.getElementById('xmlInput').value.trim();
+            if (!xmlContent) {
+                alert('Please paste XML content first.');
+                return;
+            }
+
+            fetch('/api/save_template', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/xml' },
+                body: xmlContent
+            })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        alert('Pasted template applied successfully! You can now draw parking spaces using this template.');
+                        document.getElementById('xmlInput').value = ''; // clear upon success
+                    } else {
+                        alert('Error applying template.');
+                    }
+                })
+                .catch(err => {
+                    alert('Network error while applying template: ' + err.message);
+                });
+        });
+    </script>
+</body>
+
+</html>

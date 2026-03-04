@@ -14,6 +14,9 @@
 #include "ParkingSlot.h"
 #include "MjpegServer.h"  // [NEW] Added MjpegServer
 #include "ViolationDetailForm.h"
+#include "json.hpp" // [PHASE 3] MongoEngine JSON API integration
+
+using json = nlohmann::json;
 
 #pragma managed(push, off)
 #include <opencv2/opencv.hpp>
@@ -37,61 +40,79 @@ struct OnlineAppState {
 	long long frameSequence = -1;
 };
 
-static OnlineAppState g_onlineState;
-static std::mutex g_onlineStateMutex;
+__declspec(selectany) OnlineAppState g_onlineState;
+__declspec(selectany) std::mutex g_onlineStateMutex;
 
 // ==========================================
 //  LAYER 2: LOGIC & BACKEND
 // ==========================================
 
-static cv::dnn::Net* g_net = nullptr;
-static std::vector<std::string> g_classes;
-static std::vector<cv::Scalar> g_colors;
-static BYTETracker* g_tracker = nullptr;
+__declspec(selectany) cv::dnn::Net* g_net = nullptr;
+__declspec(selectany) std::vector<std::string> g_classes;
+__declspec(selectany) std::vector<cv::Scalar> g_colors;
+__declspec(selectany) BYTETracker* g_tracker = nullptr;
 
-static ParkingManager* g_pm_logic_online = nullptr;
+__declspec(selectany) ParkingManager* g_pm_logic_online = nullptr;
 
-static cv::VideoCapture* g_cap = nullptr;
-static cv::Mat g_latestRawFrame;
-static long long g_frameSeq_online = 0;
-static std::mutex g_frameMutex;
-static double g_cameraFPS = 30.0;
+__declspec(selectany) cv::VideoCapture* g_cap = nullptr;
+__declspec(selectany) cv::Mat g_latestRawFrame;
+__declspec(selectany) long long g_frameSeq_online = 0;
+__declspec(selectany) std::mutex g_frameMutex;
+__declspec(selectany) double g_cameraFPS = 30.0;
 
-static std::mutex g_aiMutex_online;
-static bool g_modelReady = false;
-static std::atomic<bool> g_parkingEnabled_online(false); // [PHASE 1 FIX] Use atomic for thread safety
+__declspec(selectany) std::mutex g_aiMutex_online;
 
-static const int YOLO_INPUT_SIZE = 640;
-static const float CONF_THRESHOLD = 0.25f;
-static const float NMS_THRESHOLD = 0.45f;
+// ============================================================
+//  [PHASE 1] VIDEO DVR RECORDING (60-SECOND CHUNKS)
+// ============================================================
+__declspec(selectany) cv::VideoWriter* g_videoWriter_online = nullptr;
+__declspec(selectany) std::mutex       g_videoWriterMutex_online;
+__declspec(selectany) std::string      g_currentVideoRelPath = ""; // e.g. "20231025/143000.webm"
+__declspec(selectany) long long        g_videoClipStartTick = 0;
+__declspec(selectany) int              g_videoFramesWritten = 0;
+__declspec(selectany) double           g_lastClipActualFps = 0.0;
+const int VIDEO_CLIP_SECONDS = 60; // 1 minute per chunk
+
+// *** Async Video Recording (Frame Duplication System) ***
+__declspec(selectany) std::atomic<bool> g_videoRecordingRunning(false);
+__declspec(selectany) std::thread*      g_videoRecordingThread = nullptr;
+__declspec(selectany) std::mutex        g_videoCurrentFrameMutex;
+__declspec(selectany) cv::Mat           g_videoCurrentFrame; // The frame to duplicate if AI lags
+__declspec(selectany) bool g_modelReady = false;
+__declspec(selectany) std::atomic<bool> g_parkingEnabled_online(false); // [PHASE 1 FIX] Use atomic for thread safety
+
+const int YOLO_INPUT_SIZE = 640;
+const float CONF_THRESHOLD = 0.25f;
+const float NMS_THRESHOLD = 0.45f;
 
 // ==========================================
 //  LAYER 3: PRESENTATION (Frontend)
 // ==========================================
-static ParkingManager* g_pm_display_online = nullptr;
+__declspec(selectany) ParkingManager* g_pm_display_online = nullptr;
 
-static cv::Mat g_cachedParkingOverlay_online;
-static std::map<int, SlotStatus> g_lastDrawnStatus_online;
-static cv::Mat g_drawingBuffer_online; // Memory Pool
+__declspec(selectany) cv::Mat g_cachedParkingOverlay_online;
+__declspec(selectany) std::map<int, SlotStatus> g_lastDrawnStatus_online;
+__declspec(selectany) cv::Mat g_drawingBuffer_online; // Memory Pool
 
 // *** [NEW] PROCESSED FRAME SHARING (Pipeline Output) ***
-static cv::Mat g_processedFrame_online;
-static long long g_processedSeq_online = 0;
-static std::mutex g_processedMutex_online;
+__declspec(selectany) cv::Mat g_processedFrame_online;
+__declspec(selectany) long long g_processedSeq_online = 0;
+__declspec(selectany) std::mutex g_processedMutex_online;
 
 // *** [NEW] MJPEG SERVER ***
-static MjpegServer* g_mjpegServer_online = nullptr;
+__declspec(selectany) MjpegServer* g_mjpegServer_online = nullptr;
 
 // *** [PHASE 2] PERFORMANCE OPTIMIZATION ***
-static std::chrono::steady_clock::time_point g_lastViolationCheck_online = std::chrono::steady_clock::now();
-static const int VIOLATION_CHECK_INTERVAL_MS_ONLINE = 500;
+// We initialize g_lastViolationCheck_online below where the definition runs.
+__declspec(selectany) std::chrono::steady_clock::time_point g_lastViolationCheck_online = std::chrono::steady_clock::now();
+const int VIOLATION_CHECK_INTERVAL_MS_ONLINE = 500;
 
-static std::atomic<int> g_droppedFrames_online(0);
-static std::atomic<int> g_processedFramesCount_online(0);
+__declspec(selectany) std::atomic<int> g_droppedFrames_online(0);
+__declspec(selectany) std::atomic<int> g_processedFramesCount_online(0);
 
 // [FIX] Stream stability improvements
-static const int MAX_FRAME_LAG_ONLINE = 10; // Relaxed from 3 to 10 frames
-static const int NETWORK_BUFFER_SIZE = 5;    // Network jitter buffer
+const int MAX_FRAME_LAG_ONLINE = 10; // Relaxed from 3 to 10 frames
+const int NETWORK_BUFFER_SIZE = 5;    // Network jitter buffer
 
 // *** [PHASE 3] MEMORY OPTIMIZATION ***
 
@@ -105,8 +126,8 @@ struct CachedLabel_Online {
 	CachedLabel_Online() : baseline(0), isViolating(false), classId(-1) {}
 };
 
-static std::map<int, CachedLabel_Online> g_labelCache_online;
-static cv::Mat g_redOverlayBuffer_online; // [PHASE 3] Reusable red overlay buffer
+__declspec(selectany) std::map<int, CachedLabel_Online> g_labelCache_online;
+__declspec(selectany) cv::Mat g_redOverlayBuffer_online; // [PHASE 3] Reusable red overlay buffer
 
 // [PHASE 3] FPS Monitor
 struct FPSMonitor_Online {
@@ -128,7 +149,7 @@ struct FPSMonitor_Online {
 	}
 };
 
-static FPSMonitor_Online g_fpsMonitor_online;
+__declspec(selectany) FPSMonitor_Online g_fpsMonitor_online;
 
 // --- Helper Functions ---
 
@@ -166,9 +187,14 @@ static cv::Mat FormatToLetterbox(const cv::Mat& source, int width, int height, f
 // *** GET RAW FRAME ***
 static void GetRawFrameOnline(cv::Mat& outFrame, long long& outSeq) {
 	std::lock_guard<std::mutex> lock(g_frameMutex);
+	extern void DumpLog(const std::string& msg);
+	
 	if (!g_latestRawFrame.empty()) {
 		outFrame = g_latestRawFrame; // [FIX] Shallow copy for speed (AI thread clones if needed)
 		outSeq = g_frameSeq_online;
+		// DumpLog("[RAW] GetRawFrameOnline returned frame seq " + std::to_string(outSeq));
+	} else {
+		DumpLog("[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!");
 	}
 }
 
@@ -199,13 +225,29 @@ static void OpenGlobalCamera(int cameraIndex = 0) {
 static void OpenGlobalCameraFromIP(const std::string& rtspUrl) {
 	std::lock_guard<std::mutex> lock(g_frameMutex);
 	if (g_cap) { delete g_cap; g_cap = nullptr; }
-	g_cap = new cv::VideoCapture(rtspUrl);
+
+	bool isNetwork = rtspUrl.find("http://") == 0 || rtspUrl.find("rtsp://") == 0 || rtspUrl.find("https://") == 0;
+	if (isNetwork) {
+		DumpLog("[OPENCV] Opening network stream (Auto Backend): " + rtspUrl);
+		g_cap = new cv::VideoCapture(rtspUrl);
+        if (!g_cap->isOpened()) {
+            DumpLog("[OPENCV] Auto Backend failed. Trying CAP_FFMPEG explicitly...");
+            delete g_cap;
+            g_cap = new cv::VideoCapture(rtspUrl, cv::CAP_FFMPEG);
+        }
+	} else {
+		DumpLog("[OPENCV] Opening local stream: " + rtspUrl);
+		g_cap = new cv::VideoCapture(rtspUrl);
+	}
 	
 	// [FIX] Network stream optimization
 	if (g_cap->isOpened()) {
+		DumpLog("[OPENCV] Stream opened successfully! Backend API used: " + std::to_string(g_cap->getBackendName().length() > 0 ? 1 : 0) + " (" + g_cap->getBackendName() + ")");
 		g_cap->set(cv::CAP_PROP_BUFFERSIZE, NETWORK_BUFFER_SIZE); // Reduce latency
 		g_cameraFPS = g_cap->get(cv::CAP_PROP_FPS);
 		if (g_cameraFPS <= 0) g_cameraFPS = 30.0;
+	} else {
+		DumpLog("[OPENCV ERROR] Failed to open stream: " + rtspUrl);
 	}
 	
 	g_frameSeq_online = 0;
@@ -550,6 +592,131 @@ static void DrawSceneOnline(const cv::Mat& frame, long long displaySeq, cv::Mat&
 	cv::putText(outResult, stats, cv::Point(10, 25), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0, 255, 0), 2);
 }
 
+// ============================================================
+//  [PHASE 1] [UNMANAGED] VIDEO RECORDING (DVR) & FPS SYNC
+// ============================================================
+
+static void StartNewVideoClip_Online(int width, int height) {
+	if (width <= 0 || height <= 0) return;
+	SYSTEMTIME st;
+	GetLocalTime(&st);
+
+	// Date folder: C:\locvideo\YYYYMMDD
+	char dateFolder[64];
+	sprintf_s(dateFolder, sizeof(dateFolder),
+		"C:\\locvideo\\%04d%02d%02d", st.wYear, st.wMonth, st.wDay);
+	CreateDirectoryA("C:\\locvideo", NULL);
+	CreateDirectoryA(dateFolder, NULL);
+
+	// Filename: HHMMSS.webm (start time of clip)
+	char relPath[64];
+	sprintf_s(relPath, sizeof(relPath),
+		"%04d%02d%02d/%02d%02d%02d.webm",
+		st.wYear, st.wMonth, st.wDay,
+		st.wHour, st.wMinute, st.wSecond);
+
+	std::string fullPath = std::string("C:\\locvideo\\") + relPath;
+	std::replace(fullPath.begin(), fullPath.end(), '/', '\\');
+
+	std::lock_guard<std::mutex> lock(g_videoWriterMutex_online);
+	if (g_videoWriter_online) {
+		g_videoWriter_online->release();
+		delete g_videoWriter_online;
+		g_videoWriter_online = nullptr;
+	}
+
+	// We force the writer to expect strictly 10.0 FPS
+	cv::VideoWriter* writer2 = new cv::VideoWriter(
+		fullPath,
+		cv::VideoWriter::fourcc('V', 'P', '8', '0'),
+		10.0,
+		cv::Size(width, height));
+
+	if (writer2->isOpened()) {
+		g_videoWriter_online = writer2;
+		g_currentVideoRelPath = std::string(relPath);
+		g_videoClipStartTick = cv::getTickCount();
+		g_videoFramesWritten = 0; // reset counter for new clip
+		OutputDebugStringA(("[VIDEO] New clip (10 FPS DVR): " + fullPath + "\n").c_str());
+	}
+	else {
+		delete writer2;
+		OutputDebugStringA("[VIDEO] Failed to open VideoWriter!\n");
+	}
+}
+
+static void StopVideoRecording_Online() {
+	std::lock_guard<std::mutex> lock(g_videoWriterMutex_online);
+	if (g_videoWriter_online) {
+		g_videoWriter_online->release();
+		delete g_videoWriter_online;
+		g_videoWriter_online = nullptr;
+	}
+	g_currentVideoRelPath = "";
+}
+
+static void VideoRecordingThreadFunc_Online(int width, int height) {
+	const int targetFPS = 10;
+	const int frameDelayMs = 1000 / targetFPS; // 100ms per frame
+
+	StartNewVideoClip_Online(width, height);
+
+	while (g_videoRecordingRunning.load()) {
+		auto loopStartTime = std::chrono::steady_clock::now();
+
+		cv::Mat frameToWrite;
+		{
+			std::lock_guard<std::mutex> lock(g_videoCurrentFrameMutex);
+			if (!g_videoCurrentFrame.empty()) {
+				frameToWrite = g_videoCurrentFrame.clone(); // ALWAYS get the latest, even if duplicated
+			}
+		}
+
+		bool needsNewClip = false;
+		if (!frameToWrite.empty()) {
+			std::lock_guard<std::mutex> vl(g_videoWriterMutex_online);
+			if (g_videoWriter_online && g_videoWriter_online->isOpened()) {
+				g_videoWriter_online->write(frameToWrite);
+				g_videoFramesWritten++;
+
+				// Check if 60 seconds (exactly 600 frames) have elapsed to ensure 60s playback!
+				if (g_videoFramesWritten >= (targetFPS * VIDEO_CLIP_SECONDS)) {
+					needsNewClip = true;
+				}
+			}
+		}
+
+		if (needsNewClip) {
+			StartNewVideoClip_Online(width, height);
+		}
+
+		// Calculate exact sleep time needed to maintain the 100ms rhythm relative to the clock
+		auto loopEndTime = std::chrono::steady_clock::now();
+		auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(loopEndTime - loopStartTime).count();
+		
+		if (elapsedMs < frameDelayMs) {
+			std::this_thread::sleep_for(std::chrono::milliseconds(frameDelayMs - elapsedMs));
+		}
+	}
+
+	StopVideoRecording_Online();
+}
+
+static void StartVideoRecordingThread_Online(int width, int height) {
+	if (g_videoRecordingThread) return;
+	g_videoRecordingRunning.store(true);
+	g_videoRecordingThread = new std::thread(VideoRecordingThreadFunc_Online, width, height);
+}
+
+static void StopVideoRecordingThread_Online() {
+	g_videoRecordingRunning.store(false);
+	if (g_videoRecordingThread && g_videoRecordingThread->joinable()) {
+		g_videoRecordingThread->join();
+	}
+	delete g_videoRecordingThread;
+	g_videoRecordingThread = nullptr;
+}
+
 #pragma managed(pop)
 
 namespace ConsoleApplication3 {
@@ -564,6 +731,8 @@ namespace ConsoleApplication3 {
 	public ref class UploadForm : public System::Windows::Forms::Form
 	{
 	public:
+		static UploadForm^ Instance = nullptr;
+
 		UploadForm(void) {
 			InitializeComponent();
 			bufferLock = gcnew Object();
@@ -580,11 +749,80 @@ namespace ConsoleApplication3 {
 			btnLiveCamera->Enabled = false;
 			btnLiveCamera->BackColor = System::Drawing::Color::Gray;
 
+			// Assign self to static property for web api
+			UploadForm::Instance = this;
+
 			BackgroundWorker^ modelLoader = gcnew BackgroundWorker();
 			modelLoader->DoWork += gcnew DoWorkEventHandler(this, &UploadForm::LoadModel_DoWork);
 			modelLoader->RunWorkerCompleted += gcnew RunWorkerCompletedEventHandler(this, &UploadForm::LoadModel_Completed);
 			modelLoader->RunWorkerAsync();
 		}
+
+	public: bool StartCameraHeadless(String^ ip, String^ port, String^ path) {
+		if (!path->StartsWith("/")) {
+			path = "/" + path;
+		}
+		array<String^>^ urlFormats = gcnew array<String^> {
+			String::Format("http://{0}:{1}{2}", ip, port, path),
+			String::Format("http://{0}:{1}/videofeed", ip, port),
+			String::Format("http://{0}:{1}/video", ip, port),
+			String::Format("rtsp://{0}:{1}", ip, port)
+		};
+
+		bool connected = false;
+		for each (String^ streamUrl in urlFormats) {
+			std::string url = msclr::interop::marshal_as<std::string>(streamUrl);
+			DumpLog("[INFO] Headless trying to connect: " + url);
+			
+			OpenGlobalCameraFromIP(url);
+			
+			// Wait up to 5 seconds for OpenCV to open the stream
+			for (int w = 0; w < 10; ++w) {
+				if (g_cap && g_cap->isOpened()) break;
+				Threading::Thread::Sleep(500);
+			}
+
+			if (g_cap && g_cap->isOpened()) {
+				cv::Mat testFrame;
+				bool canRead = false;
+				// Wait up to 3 seconds (30 * 100ms) for first frame
+				for (int i = 0; i < 30; ++i) {
+					{
+						std::lock_guard<std::mutex> lock(g_frameMutex);
+						if (g_cap->read(testFrame) && !testFrame.empty()) { 
+                            canRead = true; 
+                            g_latestRawFrame = testFrame.clone();
+                            g_frameSeq_online++;
+                        }
+					}
+					if (canRead) {
+						connected = true;
+						DumpLog("[SUCCESS] Headless Connected successfully!");
+						break;
+					}
+					Threading::Thread::Sleep(100);
+				}
+				if (!connected) {
+					DumpLog("[WARNING] Camera opened but failed to read first frame after 3 seconds.");
+				}
+				if (connected) break;
+			}
+			{
+				if (!connected) {
+                    std::lock_guard<std::mutex> lock(g_frameMutex);
+                    if (g_cap) { delete g_cap; g_cap = nullptr; }
+                }
+			}
+		}
+
+		if (connected) {
+			StartProcessing();
+			return true;
+		} else {
+			DumpLog("[ERROR] Headless could not connect to camera.");
+			return false;
+		}
+	}
 
 	protected:
 		~UploadForm() {
@@ -1147,6 +1385,24 @@ private: System::Windows::Forms::Label^ label1;
 				label5_online->Text = System::String::Format(L"Empty: {0}", emptyCount);
 				label6_online->Text = System::String::Format(L"Normal: {0}", occupiedCount);
 				label7_online->Text = System::String::Format(L"Violation: {0}", violationCount);
+
+				if (g_mjpegServer_online) {
+					std::string json = "{\"empty\":" + std::to_string(emptyCount) + 
+					                   ",\"normal\":" + std::to_string(occupiedCount) + 
+					                   ",\"violation\":" + std::to_string(violationCount) + ",\"logs\":[";
+					bool first = true;
+					for each (ViolationRecord_Online^ rec in violationsList_online) {
+						if (!first) json += ",";
+						System::String^ ts = rec->captureTime.ToString("HH:mm:ss");
+						System::String^ vt = rec->violationType;
+						std::string timeStr = msclr::interop::marshal_as<std::string>(ts);
+						std::string typeStr = msclr::interop::marshal_as<std::string>(vt);
+						json += "{\"id\":" + std::to_string(rec->carId) + ",\"time\":\"" + timeStr + "\",\"type\":\"" + typeStr + "\"}";
+						first = false;
+					}
+					json += "]}";
+					g_mjpegServer_online->SetStats(json);
+				}
 			}
 		}
 		catch (...) {}
@@ -1163,6 +1419,9 @@ private: System::Windows::Forms::Label^ label1;
 			delete g_mjpegServer_online;
 			g_mjpegServer_online = nullptr;
 		}
+
+		// *** [PHASE 1] Stop Video Recording Thread ***
+		StopVideoRecordingThread_Online();
 
 		if (btnRunInBackground) btnRunInBackground->Enabled = false;
 		if (lblNetworkStream) lblNetworkStream->Text = "Stream: Offline";
@@ -1182,7 +1441,7 @@ private: System::Windows::Forms::Label^ label1;
 			this->Text = L"Online Mode - YOLO Detection (Ready)";
 			// [UI FIX] Only enable template button, Live Camera stays disabled
 			btnLoadParkingTemplate->Enabled = true;
-			MessageBox::Show("Model loaded!\n\n⚠️ Please load a parking template before starting live camera.", "Success", MessageBoxButtons::OK, MessageBoxIcon::Information);
+			MessageBox::Show("Model loaded!\n\nNote: Please load a parking template before starting live camera.", "Success", MessageBoxButtons::OK, MessageBoxIcon::Information);
 		}
 		else {
 			MessageBox::Show("Error loading model", "Error", MessageBoxButtons::OK, MessageBoxIcon::Error);
@@ -1235,7 +1494,10 @@ private: System::Windows::Forms::Label^ label1;
 		violationsList_online->Clear();
 		violatingCarTimers_online->Clear();
 
-		if (!processingWorker->IsBusy) processingWorker->RunWorkerAsync();
+		// [FIX Headless] Use standard Thread instead of BackgroundWorker for headless
+		Thread^ pThread = gcnew Thread(gcnew ThreadStart(this, &UploadForm::ProcessingLoopHeadless));
+		pThread->IsBackground = true;
+		pThread->Start();
 
 		if (readerThread == nullptr || !readerThread->IsAlive) {
 			readerThread = gcnew Thread(gcnew ThreadStart(this, &UploadForm::CameraReaderLoop));
@@ -1243,21 +1505,43 @@ private: System::Windows::Forms::Label^ label1;
 			readerThread->Start();
 		}
 
-		timer1->Start();
+		// Keep timer for UI if available, but it doesn't matter for headless
+		try { timer1->Start(); } catch (...) {}
 		
-		btnRunInBackground->Enabled = true;
+        try {
+            if (btnRunInBackground != nullptr) {
+		        btnRunInBackground->Enabled = true;
+            }
+        } catch(...) {}
 
-		// *** [NEW] Start MJPEG Server ***
+		// *** [HEADLESS] Skip creating a new MJPEG server if already set by main.cpp ***
+		// g_mjpegServer_online is assigned from g_globalWebServer in headless mode
 		if (!g_mjpegServer_online) {
 			g_mjpegServer_online = new MjpegServer(8080);
 			if (g_mjpegServer_online->Start()) {
-				std::string ip = GetLocalIP();
-				lblNetworkStream->Text = gcnew String(("Stream: http://" + ip + ":8080").c_str());
+                try {
+				    std::string ip = GetLocalIP();
+                    if (lblNetworkStream != nullptr) {
+				        lblNetworkStream->Text = gcnew String(("Stream: http://" + ip + ":8080").c_str());
+                    }
+                } catch(...) {}
 			} else {
-				lblNetworkStream->Text = "Stream: Failed to start";
+                try {
+                    if (lblNetworkStream != nullptr) {
+				        lblNetworkStream->Text = "Stream: Failed to start";
+                    }
+                } catch(...) {}
 				delete g_mjpegServer_online;
 				g_mjpegServer_online = nullptr;
 			}
+		} else {
+			// Already running (headless mode) — just update label if it exists
+			try {
+				std::string ip = GetLocalIP();
+                if (lblNetworkStream != nullptr) {
+				    lblNetworkStream->Text = gcnew String(("Stream: http://" + ip + ":8080").c_str());
+                }
+			} catch (...) {}
 		}
 	}
 
@@ -1280,65 +1564,77 @@ private: System::Windows::Forms::Label^ label1;
 
 			if (g_cap && g_cap->isOpened()) {
 				success = g_cap->read(tempFrame);
-			}
-			else {
-				break;
-			}
+                if (success && !tempFrame.empty()) {
+                    long long currentSeq;
+                    {
+                        std::lock_guard<std::mutex> lock(g_frameMutex);
+                        g_latestRawFrame = tempFrame; // [FIX] Use shallow copy 
+                        g_frameSeq_online++;
+                        currentSeq = g_frameSeq_online;
+                    }
 
-			if (success && !tempFrame.empty()) {
-				long long currentSeq;
-				{
-					std::lock_guard<std::mutex> lock(g_frameMutex);
-					g_latestRawFrame = tempFrame; // [FIX] Use shallow copy (swap later)
-					g_frameSeq_online++;
-					currentSeq = g_frameSeq_online;
-				}
+                    // [FIX] Relaxed frame drop logic (10 frames tolerance instead of 3)
+                    bool shouldDrop = false;
+                    {
+                        std::lock_guard<std::mutex> lock(g_processedMutex_online);
+                        if (currentSeq - g_processedSeq_online > MAX_FRAME_LAG_ONLINE) {
+                            shouldDrop = true;
+                            g_droppedFrames_online++;
+                        }
+                    }
 
-				// [FIX] Relaxed frame drop logic (10 frames tolerance instead of 3)
-				bool shouldDrop = false;
-				{
-					std::lock_guard<std::mutex> lock(g_processedMutex_online);
-					if (currentSeq - g_processedSeq_online > MAX_FRAME_LAG_ONLINE) {
-						shouldDrop = true;
-						g_droppedFrames_online++;
-					}
-				}
+                    if (!shouldDrop) {
+                        cv::Mat renderedFrame;
+                        DrawSceneOnline(tempFrame, currentSeq, renderedFrame);
 
-				if (!shouldDrop) {
-					cv::Mat renderedFrame;
-					DrawSceneOnline(tempFrame, currentSeq, renderedFrame);
+                        if (!renderedFrame.empty()) {
+                            std::lock_guard<std::mutex> lock(g_processedMutex_online);
+                            g_processedFrame_online = renderedFrame; // [FIX] Shallow copy
+                            g_processedSeq_online = currentSeq;
+                            g_processedFramesCount_online++;
 
-					if (!renderedFrame.empty()) {
-						std::lock_guard<std::mutex> lock(g_processedMutex_online);
-						g_processedFrame_online = renderedFrame; // [FIX] Shallow copy
-						g_processedSeq_online = currentSeq;
-						g_processedFramesCount_online++;
+                            // [FIX] Update MJPEG Server inside the loop so it streams out!
+                            if (g_mjpegServer_online) {
+                                g_mjpegServer_online->SetLatestFrame(g_processedFrame_online);
+                            }
 
-						// [FIX] Update MJPEG Server inside the loop so it streams out!
-						if (g_mjpegServer_online) {
-							g_mjpegServer_online->SetLatestFrame(g_processedFrame_online);
-						}
-					}
-				}
+                            // [PHASE 1] Scale down to ~720p max to prevent CPU VP8 encoder lag
+                            cv::Mat scaledFrame;
+                            double maxW = 1280.0;
+                            if (renderedFrame.cols > maxW) {
+                                double scale = maxW / renderedFrame.cols;
+                                cv::resize(renderedFrame, scaledFrame, cv::Size(), scale, scale);
+                            } else {
+                                scaledFrame = renderedFrame;
+                            }
 
-				nextTick += (long long)(ticksPerFrame * tickFreq / 1000.0);
-				if (cv::getTickCount() > nextTick) nextTick = cv::getTickCount();
-			}
-			else {
-				if (g_cap && g_cap->isOpened()) {
-					// [FIX] Don't break immediately, might be temporary network hiccup
+                            // [PHASE 1] Start DVR with extreme precision on the exact camera resolution
+                            StartVideoRecordingThread_Online(scaledFrame.cols, scaledFrame.rows);
+
+                            // Update the global frame for the duplicate-based DVR system
+                            {
+                                std::lock_guard<std::mutex> vidLock(g_videoCurrentFrameMutex);
+                                g_videoCurrentFrame = scaledFrame.clone();
+                            }
+                        }
+                    }
+
+                    nextTick += (long long)(ticksPerFrame * tickFreq / 1000.0);
+                    if (cv::getTickCount() > nextTick) nextTick = cv::getTickCount();
+                } else {
+                    // [FIX] Don't break immediately, might be temporary network hiccup
 					Threading::Thread::Sleep(50);
 					continue;
-				}
-				break;
+                }
+			} else {
+				break; // Camera is closed, terminate loop
 			}
 		}
 	}
 
-private: System::Void processingWorker_DoWork(System::Object^ sender, DoWorkEventArgs^ e) {
-	BackgroundWorker^ worker = safe_cast<BackgroundWorker^>(sender);
+private: void ProcessingLoopHeadless() {
 	lastProcessedSeq = -1;
-	while (!shouldStop && !worker->CancellationPending) {
+	while (!shouldStop) {
 		try {
 			cv::Mat frameToProcess;
 			long long seq = 0;
@@ -1356,11 +1652,15 @@ private: System::Void processingWorker_DoWork(System::Object^ sender, DoWorkEven
 	}
 }
 
+private: System::Void processingWorker_DoWork(System::Object^ sender, DoWorkEventArgs^ e) {
+	ProcessingLoopHeadless();
+}
+
 private: System::Void btnLiveCamera_Click(System::Object^ sender, System::EventArgs^ e) {
 	// [UI FIX] Check if template is loaded before proceeding
 	if (!g_parkingEnabled_online.load() || !g_pm_logic_online || !g_pm_display_online) {
 		MessageBox::Show(
-			"⚠️ Parking template not loaded!\n\n" +
+			"[!] Parking template not loaded!\n\n" +
 			"Please click 'Load Template' button first before starting live camera.\n\n" +
 			"Steps:\n" +
 			"1. Click 'Load Template' button\n" +
@@ -1597,7 +1897,7 @@ private: System::Void btnLoadParkingTemplate_Click(System::Object^ sender, Syste
 			btnLiveCamera->BackColor = System::Drawing::Color::Tomato;
 			
 			MessageBox::Show(
-				"✅ Template loaded successfully!\n\n" +
+				"[OK] Template loaded successfully!\n\n" +
 				"Parking slot detection is now active.\n" +
 				"Violations (cars parked outside slots) will be marked in RED.\n\n" +
 				"You can now start Live Camera.", 
@@ -1628,6 +1928,129 @@ private: System::Void UploadForm_FormClosing(System::Object^ sender, FormClosing
 	StopProcessing();
 }
 
+	// ==========================================================
+	// [PHASE 3] JSON REGISTRY & MONGOENGINE EXPORT (1 FILE PER EVENT/CHANGE)
+	// ==========================================================
+	private: void SaveAnomalyEventJson(int carId, System::String^ violationType, long long epochMs, std::string snapshotPath) {
+		SYSTEMTIME st;
+		GetLocalTime(&st);
+		char dateFolder[128];
+		sprintf_s(dateFolder, sizeof(dateFolder), "C:\\loc_json\\anomaly_events\\%04d%02d%02d", st.wYear, st.wMonth, st.wDay);
+		CreateDirectoryA("C:\\loc_json", NULL);
+		CreateDirectoryA("C:\\loc_json\\anomaly_events", NULL);
+		CreateDirectoryA(dateFolder, NULL);
+
+		// [1 File Per Event]
+		std::string jsonPath = std::string(dateFolder) + "\\event_" + std::to_string(epochMs) + "_car_" + std::to_string(carId) + ".json";
+		
+		// Calculate seconds into the clip for media_seek_time_seconds
+		long long currentTick = cv::getTickCount();
+		int seekSeconds = (int)((currentTick - g_videoClipStartTick) / cv::getTickFrequency());
+		if (seekSeconds < 0) seekSeconds = 0;
+
+		// Format timestamp as ISO-8601 string for MongoEngine DateTimeField
+		char timeBuf[64];
+		sprintf_s(timeBuf, sizeof(timeBuf), "%04d-%02d-%02dT%02d:%02d:%02d", 
+                  st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+
+		// Find the camera's IP or identifier for camera_id
+		std::string camId = "camera_1";
+		if (lblNetworkStream != nullptr) {
+			System::String^ streamText = lblNetworkStream->Text;
+			camId = msclr::interop::marshal_as<std::string>(streamText);
+		}
+
+		// Replace backslashes with forward slashes for cross-platform JSON API usage
+		std::replace(snapshotPath.begin(), snapshotPath.end(), '\\', '/');
+		std::string videoPath = "C:/locvideo/" + g_currentVideoRelPath;
+
+		json newEvent = {
+			{"camera_id", camId},
+			{"timestamp", std::string(timeBuf)},
+			{"event_type", msclr::interop::marshal_as<std::string>(violationType)},
+			{"confidence", 0.95},
+			{"media_snapshot_url", snapshotPath},
+			{"media_video_url", videoPath},
+			{"media_seek_time_seconds", seekSeconds},
+			{"is_reviewed", false}
+		};
+
+		std::ofstream outFile(jsonPath);
+		if (outFile.is_open()) {
+			outFile << newEvent.dump(4);
+			outFile.close();
+		}
+	}
+
+	private: void SaveParkingAreaJson() {
+		OnlineAppState state;
+		{
+			std::lock_guard<std::mutex> lock(g_onlineStateMutex);
+			state = g_onlineState;
+		}
+
+		int emptyCount = 0;
+		int occupiedCount = 0;
+		for (const auto& slotEntry : state.slotStatuses) {
+			if (slotEntry.second == SlotStatus::EMPTY) emptyCount++;
+			else occupiedCount++;
+		}
+		int totalSlots = emptyCount + occupiedCount;
+		int violationCount = state.violatingCarIds.size();
+
+		// Track state changes to prevent bloat
+		static int lastEmpty = -1;
+		static int lastOccupied = -1;
+		static int lastViolation = -1;
+
+		if (emptyCount == lastEmpty && occupiedCount == lastOccupied && violationCount == lastViolation) {
+			return; // No change in numbers, do not generate a file
+		}
+
+		lastEmpty = emptyCount;
+		lastOccupied = occupiedCount;
+		lastViolation = violationCount;
+
+		SYSTEMTIME st;
+		GetLocalTime(&st);
+		char dateFolder[128];
+		sprintf_s(dateFolder, sizeof(dateFolder), "C:\\loc_json\\parking_areas\\%04d%02d%02d", st.wYear, st.wMonth, st.wDay);
+		CreateDirectoryA("C:\\loc_json", NULL);
+		CreateDirectoryA("C:\\loc_json\\parking_areas", NULL);
+		CreateDirectoryA(dateFolder, NULL);
+
+		long long epoch = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+		std::string jsonPath = std::string(dateFolder) + "\\stats_" + std::to_string(epoch) + ".json";
+
+		char timeBuf[64];
+		sprintf_s(timeBuf, sizeof(timeBuf), "%04d-%02d-%02dT%02d:%02d:%02d", 
+                  st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+
+		std::string camId = "camera_1";
+		if (lblNetworkStream != nullptr) {
+			camId = msclr::interop::marshal_as<std::string>(lblNetworkStream->Text);
+		}
+
+		// MongoEngine ParkingArea representation
+		json areaStats = {
+			{"name", "Main Zone A"},
+			{"description", "Front Parking Monitoring"},
+			{"camera_id", camId},
+			{"total_slots", totalSlots},
+			{"available_slots", emptyCount},
+			{"occupied_slots", occupiedCount},
+			{"violation_slots", violationCount},
+			{"created_date", std::string(timeBuf)},
+			{"updated_date", std::string(timeBuf)}
+		};
+
+		std::ofstream outFile(jsonPath);
+		if (outFile.is_open()) {
+			outFile << areaStats.dump(4);
+			outFile.close();
+		}
+	}
+
 	// *** [NEW] VIOLATION ALERTS METHODS ***
 	private: void AddViolationRecord_Online(int carId, cv::Mat& frameCapture, System::String^ violationType, 
 									 cv::Mat fullFrame, cv::Rect carBox) {
@@ -1653,6 +2076,32 @@ private: System::Void UploadForm_FormClosing(System::Object^ sender, FormClosing
 				memcpy((unsigned char*)visBmpData->Scan0.ToPointer() + y * visBmpData->Stride, visualizationMat.data + y * visualizationMat.step, visualizationMat.cols * 3);
 			}
 			visualizationBitmap->UnlockBits(visBmpData);
+
+			// ==========================================================
+			// [PHASE 2] SAVE DARKENED SNAPSHOT TO DISK (WITH DATE FOLDER)
+			// ==========================================================
+			SYSTEMTIME st;
+			GetLocalTime(&st);
+			char dateFolder[128];
+			sprintf_s(dateFolder, sizeof(dateFolder),
+				"C:\\smart_parking_violations\\%04d%02d%02d", st.wYear, st.wMonth, st.wDay);
+
+			CreateDirectoryA("C:\\smart_parking_violations", NULL);
+			CreateDirectoryA(dateFolder, NULL);
+
+			long long epoch = std::chrono::duration_cast<std::chrono::milliseconds>(
+				std::chrono::system_clock::now().time_since_epoch()
+			).count();
+			
+			std::string violationFileName = "camera_1_event_" + std::to_string(epoch) + "_car_" + std::to_string(carId) + ".jpg";
+			std::string violationFilePath = std::string(dateFolder) + "\\" + violationFileName;
+			
+			cv::imwrite(violationFilePath, visualizationMat);
+			OutputDebugStringA(("[SNAPSHOT] Saved violation snapshot: " + violationFilePath + "\n").c_str());
+
+			// [PHASE 3] Trigger JSON generation
+			SaveAnomalyEventJson(carId, violationType, epoch, violationFilePath);
+			SaveParkingAreaJson();
 		}
 
 		ViolationRecord_Online^ record = gcnew ViolationRecord_Online();

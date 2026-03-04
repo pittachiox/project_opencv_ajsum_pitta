@@ -588,7 +588,7 @@ namespace ConsoleApplication3 {
 			listBoxSlots->Items->Add(item);
 		}
 		int totalSlots = parkingManager->getSlots().size();
-		lblStatus->Text = "📊 Total Slots: " + totalSlots + " | Drawing: " + (isDrawing ? "✓ YES" : "✗ NO");
+		lblStatus->Text = "Total Slots: " + totalSlots + " | Drawing: " + (isDrawing ? "YES" : "NO");
 		UpdateStatistics();
 	}
 

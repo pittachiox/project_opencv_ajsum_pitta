@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Parking Slot Setup</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: #f0f2f5;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Top bar - mirrors the WinForms Form title bar */
+        .titlebar {
+            background: #2c3e50;
+            color: white;
+            padding: 8px 16px;
+            font-size: 15px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .titlebar a {
+            color: #aaa;
+            text-decoration: none;
+            font-size: 13px;
+            margin-left: auto;
+        }
+
+        .titlebar a:hover {
+            color: white;
+        }
+
+        /* Main layout: left canvas panel + right control panel */
+        .main {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* ============ Left Panel (PictureBox equivalent) ============ */
+        .panel-left {
+            flex: 1;
+            background: #f0f2f5;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+        }
+
+        #canvas-container {
+            flex: 1;
+            background: white;
+            border: 1px solid #ccc;
+            cursor: crosshair;
+            position: relative;
+            overflow: hidden;
+        }
+
+        #drawCanvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Status bar at bottom of canvas - mirrors lblStatus */
+        .status-bar {
+            background: #fffdd0;
+            border: 1px solid #ccc;
+            border-top: none;
+            padding: 6px 12px;
+            font-size: 13px;
+            font-weight: bold;
+            color: #444;
+            text-align: center;
+        }
+
+        /* ============ Right Panel (panel2 equivalent, 320px) ============ */
+        .panel-right {
+            width: 320px;
+            background: beige;
+            border-left: 1px solid #ccc;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            overflow-y: auto;
+        }
+
+        .panel-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: #222;
+            text-align: center;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #bbb;
+        }
+
+        /* Load buttons row - mirrors btnLoadVideo + btnLoadLive */
+        .btn-row {
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 10px 6px;
+            border: none;
+            border-radius: 4px;
+            font-size: 13px;
+            font-weight: bold;
+            color: white;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        .btn:hover {
+            opacity: 0.85;
+        }
+
+        .btn:disabled {
+            background: #aaa !important;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+
+        .btn-blue {
+            background: #4caff0;
+        }
+
+        .btn-yellow {
+            background: #ffc107;
+            color: #333;
+        }
+
+        .btn-green {
+            background: #28a745;
+        }
+
+        .btn-red {
+            background: #dc3545;
+        }
+
+        .btn-purple {
+            background: #6464ff;
+        }
+
+        .btn-full {
+            width: 100%;
+        }
+
+        .divider {
+            border: none;
+            border-top: 1px solid #bbb;
+            margin: 4px 0;
+        }
+
+        label {
+            font-size: 12px;
+            font-weight: bold;
+            color: #444;
+            display: block;
+            margin-bottom: 2px;
+        }
+
+        input[type="text"],
+        textarea {
+            width: 100%;
+            padding: 6px;
+            border: 1px solid #999;
+            border-radius: 3px;
+            font-size: 13px;
+            background: white;
+        }
+
+        textarea {
+            resize: none;
+            height: 50px;
+        }
+
+        /* Slot list - mirrors listBoxSlots */
+        .list-header {
+            font-size: 13px;
+            font-weight: bold;
+            color: #222;
+            margin-top: 4px;
+        }
+
+        #slotList {
+            border: 1px solid #999;
+            background: #f8f9fa;
+            list-style: none;
+            padding: 0;
+            height: 180px;
+            overflow-y: auto;
+            font-family: Consolas, monospace;
+            font-size: 13px;
+        }
+
+        #slotList li {
+            padding: 5px 8px;
+            cursor: pointer;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        #slotList li:hover {
+            background: #d0e8ff;
+        }
+
+        #slotList li.selected {
+            background: #b0d4ff;
+            font-weight: bold;
+        }
+
+        /* Stats panel - mirrors panelStats */
+        .stats-row {
+            display: flex;
+            gap: 4px;
+            margin-top: 4px;
+        }
+
+        .stat-box {
+            flex: 1;
+            text-align: center;
+            padding: 4px 2px;
+            border-radius: 3px;
+            color: white;
+        }
+
+        .stat-box .count {
+            font-size: 16px;
+            font-weight: bold;
+            display: block;
+        }
+
+        .stat-box .name {
+            font-size: 10px;
+            font-weight: bold;
+            display: block;
+        }
+
+        .stat-empty {
+            background: #c8c8c8;
+        }
+
+        .stat-normal {
+            background: #4caff0;
+        }
+
+        .stat-violation {
+            background: #dc3545;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Title bar mirrors WinForms Form header -->
+    <div class="titlebar">
+        P Parking Slot Setup - Draw Parking Areas
+        <a href="/">Back to Home</a>
+    </div>
+
+    <!-- Main area -->
+    <div class="main">
+
+        <!-- Left: Canvas (mirrors panel1 + pictureBox1) -->
+        <div class="panel-left">
+            <div id="canvas-container">
+                <canvas id="drawCanvas"></canvas>
+            </div>
+            <!-- Status bar mirrors lblStatus -->
+            <div class="status-bar" id="statusBar">Status: Load Live Camera or Video to start</div>
+        </div>
+
+        <!-- Right: Controls (mirrors panel2, 320px) -->
+        <div class="panel-right">
+            <div class="panel-title">P Parking Setup</div>
+
+            <!-- Load source buttons (mirrors btnLoadVideo + btnLoadLive) -->
+            <div class="btn-row">
+                <button class="btn btn-blue" id="btnLoadVideo" onclick="loadVideoFrame()">
+                    Load<br>Video
+                </button>
+                <button class="btn btn-yellow" id="btnLoadLive" onclick="loadLiveFrame()">
+                    Live<br>Camera
+                </button>
+            </div>
+
+            <hr class="divider">
+
+            <!-- Draw/Action buttons (mirrors btnClearAll + btnSaveTemplate) -->
+            <div class="btn-row">
+                <button class="btn btn-red" id="btnClearAll" onclick="clearAll()" disabled>Clear All</button>
+                <button class="btn btn-green" id="btnSave" onclick="saveTemplate()" disabled>Save</button>
+            </div>
+            <button class="btn btn-purple btn-full" id="btnLoadTemplate" onclick="loadTemplate()">Load Template</button>
+
+            <hr class="divider">
+
+            <!-- Template name (mirrors txtTemplateName) -->
+            <label for="txtName">Template Name:</label>
+            <input type="text" id="txtName" value="ParkingTemplate_1">
+
+            <!-- Description (mirrors txtDescription) -->
+            <label for="txtDesc">Description:</label>
+            <textarea id="txtDesc">Parking area for ...</textarea>
+
+            <hr class="divider">
+
+            <!-- Slot list (mirrors label3 + listBoxSlots + btnDeleteSlot) -->
+            <div class="list-header">P Parking Slots</div>
+            <ul id="slotList"></ul>
+            <div class="btn-row">
+                <button class="btn btn-blue" id="btnFinishSlot" onclick="finishSlot()" disabled style="flex:1.5">Finish
+                    Slot (Right-click)</button>
+                <button class="btn btn-red" id="btnDeleteSlot" onclick="deleteSelectedSlot()" disabled>Delete</button>
+            </div>
+
+            <!-- Instructions reminder -->
+            <div
+                style="font-size:11px; color:#555; margin-top:4px; background:#fff; padding:6px; border:1px solid #ccc; border-radius:3px;">
+                <strong>How to draw:</strong><br>
+                Left-click = Add point<br>
+                Right-click = Finish current slot<br>
+                Minimum 3 points per slot
+            </div>
+
+            <!-- Stats panel (mirrors panelStats) -->
+            <div class="stats-row">
+                <div class="stat-box stat-empty">
+                    <span class="count" id="cntEmpty">0</span>
+                    <span class="name">Empty</span>
+                </div>
+                <div class="stat-box stat-normal">
+                    <span class="count" id="cntNormal">0</span>
+                    <span class="name">Normal</span>
+                </div>
+                <div class="stat-box stat-violation">
+                    <span class="count" id="cntViolation">0</span>
+                    <span class="name">Violation</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('drawCanvas');
+        const ctx = canvas.getContext('2d');
+        const container = document.getElementById('canvas-container');
+        const statusBar = document.getElementById('statusBar');
+        const slotList = document.getElementById('slotList');
+
+        let bgImage = null;       // Background image (cv::Mat frame)
+        let slots = [];           // Array of completed slots [{id, polygon:[{x,y},...]}]
+        let currentPoly = [];     // Points being drawn
+        let isDrawing = false;
+        let selectedSlotIdx = -1;
+        let nextSlotId = 1;
+        let imageW = 0, imageH = 0;  // Natural image dimensions
+
+        // ===================== Canvas sizing =====================
+        function resizeCanvas() {
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+            redraw();
+        }
+        const ro = new ResizeObserver(resizeCanvas);
+        ro.observe(container);
+
+        // ===================== Coordinate mapping =====================
+        // Map canvas pixel → original image coordinate
+        function canvasToImage(cx, cy) {
+            if (!imageW || !imageH) return { x: cx, y: cy };
+            const scaleX = imageW / canvas.width;
+            const scaleY = imageH / canvas.height;
+            const scale = Math.max(scaleX, scaleY); // Zoom mode keeps aspect ratio
+            const dispW = imageW / scale;
+            const dispH = imageH / scale;
+            const offX = (canvas.width - dispW) / 2;
+            const offY = (canvas.height - dispH) / 2;
+            return {
+                x: Math.round((cx - offX) * scale),
+                y: Math.round((cy - offY) * scale)
+            };
+        }
+
+        // ===================== Redraw =====================
+        function redraw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (bgImage) {
+                // Draw background with Zoom mode (like PictureBoxSizeMode::Zoom)
+                const scale = Math.min(canvas.width / imageW, canvas.height / imageH);
+                const dw = imageW * scale, dh = imageH * scale;
+                const ox = (canvas.width - dw) / 2, oy = (canvas.height - dh) / 2;
+                ctx.drawImage(bgImage, ox, oy, dw, dh);
+            }
+
+            const scale = bgImage ? Math.min(canvas.width / imageW, canvas.height / imageH) : 1;
+            const ox = bgImage ? (canvas.width - imageW * scale) / 2 : 0;
+            const oy = bgImage ? (canvas.height - imageH * scale) / 2 : 0;
+
+            function imgToCanvas(ix, iy) {
+                return { x: ix * scale + ox, y: iy * scale + oy };
+            }
+
+            // Draw completed slots (green polygons with slot IDs)
+            slots.forEach((slot, idx) => {
+                if (slot.polygon.length < 2) return;
+                ctx.beginPath();
+                const p0 = imgToCanvas(slot.polygon[0].x, slot.polygon[0].y);
+                ctx.moveTo(p0.x, p0.y);
+                slot.polygon.forEach(p => { const c = imgToCanvas(p.x, p.y); ctx.lineTo(c.x, c.y); });
+                ctx.closePath();
+                ctx.strokeStyle = idx === selectedSlotIdx ? '#ffff00' : '#00ff00';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                // Slot ID label
+                const cx = slot.polygon.reduce((s, p) => s + p.x, 0) / slot.polygon.length;
+                const cy = slot.polygon.reduce((s, p) => s + p.y, 0) / slot.polygon.length;
+                const cc = imgToCanvas(cx, cy);
+                ctx.fillStyle = '#ffff00';
+                ctx.font = 'bold 18px Segoe UI';
+                ctx.fillText(slot.id, cc.x, cc.y);
+            });
+
+            // Draw current polygon in progress (blue lines + red dots)
+            if (currentPoly.length > 0) {
+                ctx.beginPath();
+                const p0 = imgToCanvas(currentPoly[0].x, currentPoly[0].y);
+                ctx.moveTo(p0.x, p0.y);
+                currentPoly.forEach(p => { const c = imgToCanvas(p.x, p.y); ctx.lineTo(c.x, c.y); });
+                ctx.strokeStyle = '#0000ff';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                currentPoly.forEach(p => {
+                    const c = imgToCanvas(p.x, p.y);
+                    ctx.beginPath();
+                    ctx.arc(c.x, c.y, 5, 0, Math.PI * 2);
+                    ctx.fillStyle = '#ff0000';
+                    ctx.fill();
+                });
+            }
+        }
+
+        // ===================== Mouse events =====================
+        canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+        canvas.addEventListener('mousedown', (e) => {
+            if (!bgImage) return;
+            const rect = canvas.getBoundingClientRect();
+            const cx = e.clientX - rect.left;
+            const cy = e.clientY - rect.top;
+
+            if (e.button === 2) {
+                // Right-click: finish current slot
+                finishSlot();
+                return;
+            }
+
+            // Left-click: add point
+            if (!isDrawing) {
+                isDrawing = true;
+                setActionEnabled(true);
+            }
+            const imgPt = canvasToImage(cx, cy);
+            currentPoly.push(imgPt);
+            statusBar.textContent = 'Drawing Slot ' + nextSlotId + ': ' + currentPoly.length + ' points (Right-click to finish)';
+            redraw();
+        });
+
+        // ===================== Actions =====================
+        function finishSlot() {
+            if (currentPoly.length < 3) {
+                if (currentPoly.length > 0) {
+                    statusBar.textContent = 'Need at least 3 points to finish a slot. Keep clicking.';
+                }
+                return;
+            }
+            slots.push({ id: nextSlotId++, polygon: [...currentPoly] });
+            currentPoly = [];
+            isDrawing = slots.length > 0;
+            updateSlotList();
+            redraw();
+            statusBar.textContent = 'Total Slots: ' + slots.length + ' | Left-click to start next slot';
+        }
+
+        function clearAll() {
+            slots = [];
+            currentPoly = [];
+            isDrawing = false;
+            nextSlotId = 1;
+            selectedSlotIdx = -1;
+            updateSlotList();
+            setActionEnabled(false);
+            redraw();
+            statusBar.textContent = 'Cleared. Click on the image to start drawing.';
+        }
+
+        function deleteSelectedSlot() {
+            if (selectedSlotIdx < 0 || selectedSlotIdx >= slots.length) return;
+            slots.splice(selectedSlotIdx, 1);
+            // Re-number slots
+            slots.forEach((s, i) => s.id = i + 1);
+            nextSlotId = slots.length + 1;
+            selectedSlotIdx = -1;
+            updateSlotList();
+            redraw();
+        }
+
+        function updateSlotList() {
+            slotList.innerHTML = '';
+            slots.forEach((slot, idx) => {
+                const li = document.createElement('li');
+                li.textContent = 'Slot ' + slot.id + ' (' + slot.polygon.length + ' points)';
+                li.onclick = () => { selectedSlotIdx = idx; updateSlotList(); redraw(); };
+                if (idx === selectedSlotIdx) li.classList.add('selected');
+                slotList.appendChild(li);
+            });
+            document.getElementById('btnDeleteSlot').disabled = selectedSlotIdx < 0;
+            document.getElementById('cntEmpty').textContent = slots.length;
+            document.getElementById('cntNormal').textContent = 0;
+            document.getElementById('cntViolation').textContent = 0;
+        }
+
+        function setActionEnabled(enabled) {
+            document.getElementById('btnClearAll').disabled = !enabled;
+            document.getElementById('btnSave').disabled = !enabled;
+            document.getElementById('btnFinishSlot').disabled = !enabled;
+        }
+
+        // ===================== Load frame from live camera =====================
+        function loadLiveFrame() {
+            statusBar.textContent = 'Fetching live frame...';
+            const img = new Image();
+            img.onload = () => {
+                bgImage = img;
+                imageW = img.naturalWidth;
+                imageH = img.naturalHeight;
+                resizeCanvas();
+                setActionEnabled(true);
+                statusBar.textContent = 'Live frame loaded! Left-click to draw slot points. Right-click to finish slot.';
+            };
+            img.onerror = () => {
+                statusBar.textContent = 'No camera frame available. Connect camera first via Home > Live Camera.';
+            };
+            img.src = '/api/current_frame?t=' + Date.now();
+        }
+
+        // ===================== Load template from file =====================
+        function loadTemplate() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.xml';
+            input.onchange = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const text = await file.text();
+                parseXMLTemplate(text);
+            };
+            input.click();
+        }
+
+        function parseXMLTemplate(xmlText) {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(xmlText, 'text/xml');
+            const slotEls = doc.querySelectorAll('slot');
+            slots = [];
+            slotEls.forEach(slotEl => {
+                const id = parseInt(slotEl.querySelector('id')?.textContent || '0');
+                const pts = slotEl.querySelector('points')?.textContent?.trim().split(/\s+/).map(Number) || [];
+                const polygon = [];
+                for (let i = 0; i + 1 < pts.length; i += 2) {
+                    polygon.push({ x: pts[i], y: pts[i + 1] });
+                }
+                if (polygon.length >= 3) slots.push({ id, polygon });
+            });
+            nextSlotId = slots.length > 0 ? Math.max(...slots.map(s => s.id)) + 1 : 1;
+            updateSlotList();
+            setActionEnabled(true);
+            redraw();
+            statusBar.textContent = 'Template loaded: ' + slots.length + ' slots. Load a frame to see overlay.';
+        }
+
+        // ===================== Save template =====================
+        function saveTemplate() {
+            if (slots.length === 0) {
+                alert('No slots drawn! Draw parking slots first.');
+                return;
+            }
+            const name = document.getElementById('txtName').value || 'ParkingTemplate_1';
+            let xml = '<?xml version="1.0" encoding="utf-8"?>\n<opencv_storage>\n<slots>\n';
+            slots.forEach(slot => {
+                const pts = slot.polygon.map(p => p.x + ' ' + p.y).join(' ');
+                xml += '  <slot>\n    <id>' + slot.id + '</id>\n    <points>\n      ' + pts + '</points></slot>\n';
+            });
+            xml += '</slots>\n</opencv_storage>\n';
+
+            fetch('/api/save_template', {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/xml' },
+                body: xml
+            }).then(r => r.json()).then(result => {
+                if (result.status === 'success') {
+                    statusBar.textContent = '[OK] Template saved! ' + slots.length + ' slots active. Redirecting to dashboard...';
+                    setTimeout(() => window.location.href = '/dashboard', 1500);
+                } else {
+                    statusBar.textContent = 'Save failed. Check if camera is connected.';
+                }
+            }).catch(() => {
+                statusBar.textContent = 'Error saving template.';
+            });
+        }
+
+        // Dummy loadVideoFrame — opens file picker, reads first frame
+        function loadVideoFrame() {
+            alert('Video loading from browser is not supported in this version.\nUse "Live Camera" button to grab a frame from the connected camera.');
+        }
+
+        // Init
+        resizeCanvas();
+    </script>
+</body>
+
+</html>

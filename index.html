@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Parking - Web Dashboard</title>
+    <style>
+        :root {
+            --bg-color: #121212;
+            --panel-bg: #1e1e1e;
+            --text-main: #ffffff;
+            --text-muted: #a0a0a0;
+            --empty-color: #28a745;
+            --normal-color: #ffc107;
+            --violation-color: #dc3545;
+            --border-radius: 12px;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .header {
+            width: 100%;
+            max-width: 1200px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 600;
+        }
+
+        .status-badge {
+            background-color: var(--empty-color);
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .dashboard {
+            display: flex;
+            width: 100%;
+            max-width: 1200px;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .video-section {
+            flex: 2;
+            min-width: 600px;
+            background: var(--panel-bg);
+            border-radius: var(--border-radius);
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
+        }
+
+        .video-container {
+            width: 100%;
+            background: #000;
+            border-radius: 8px;
+            overflow: hidden;
+            aspect-ratio: 16/9;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .video-container img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        .sidebar {
+            flex: 1;
+            min-width: 300px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 15px;
+        }
+
+        .stat-card {
+            background: var(--panel-bg);
+            padding: 20px;
+            border-radius: var(--border-radius);
+            text-align: center;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            transition: transform 0.2s;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-2px);
+        }
+
+        .stat-title {
+            font-size: 14px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+        }
+
+        .stat-value {
+            font-size: 36px;
+            font-weight: bold;
+        }
+
+        .stat-empty {
+            border-bottom: 4px solid var(--empty-color);
+        }
+
+        .stat-empty .stat-value {
+            color: var(--empty-color);
+        }
+
+        .stat-normal {
+            border-bottom: 4px solid var(--normal-color);
+        }
+
+        .stat-normal .stat-value {
+            color: var(--normal-color);
+        }
+
+        .stat-violation {
+            border-bottom: 4px solid var(--violation-color);
+        }
+
+        .stat-violation .stat-value {
+            color: var(--violation-color);
+        }
+
+        .logs-section {
+            background: var(--panel-bg);
+            border-radius: var(--border-radius);
+            padding: 20px;
+            flex-grow: 1;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            display: flex;
+            flex-direction: column;
+            max-height: 400px;
+        }
+
+        .logs-section h2 {
+            margin-top: 0;
+            font-size: 18px;
+            border-bottom: 1px solid #333;
+            padding-bottom: 10px;
+        }
+
+        .logs-container {
+            overflow-y: auto;
+            flex-grow: 1;
+            padding-right: 5px;
+        }
+
+        /* Custom Scrollbar */
+        .logs-container::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .logs-container::-webkit-scrollbar-track {
+            background: #2a2a2a;
+            border-radius: 4px;
+        }
+
+        .logs-container::-webkit-scrollbar-thumb {
+            background: #555;
+            border-radius: 4px;
+        }
+
+        .log-item {
+            background: #2a2a2a;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-left: 4px solid var(--violation-color);
+            animation: slideIn 0.3s ease-out forwards;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .log-time {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .log-content {
+            flex-grow: 1;
+            margin-left: 15px;
+            font-size: 14px;
+        }
+
+        .log-content strong {
+            color: #ff6b6b;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="header">
+        <h1>Smart Parking - Control Center</h1>
+        <div style="display:flex; gap:10px; align-items:center;">
+            <a href="/setup_parking"
+                style="background:#4caff0; color:white; padding:7px 14px; border-radius:6px; text-decoration:none; font-size:13px; font-weight:bold;">Parking
+                Setup</a>
+            <a href="/setup_online"
+                style="background:#ffc107; color:#333; padding:7px 14px; border-radius:6px; text-decoration:none; font-size:13px; font-weight:bold;">Camera
+                Setup</a>
+            <a href="/" style="color:#aaa; text-decoration:none; font-size:13px;">Home</a>
+            <div class="status-badge" id="conn-status">Live</div>
+        </div>
+    </div>
+
+    <div class="dashboard">
+        <!-- Video Stream Player -->
+        <div class="video-section">
+            <div class="video-container">
+                <img src="/video" alt="MJPEG Stream" id="streamImage" onerror="handleStreamError()">
+            </div>
+            <div style="margin-top: 15px; color: var(--text-muted); font-size: 12px; text-align: center;">
+                Feed updates in real-time. API Poll Rate: 1000ms.
+            </div>
+        </div>
+
+        <!-- Sidebar Stats & Logs -->
+        <div class="sidebar">
+            <div class="stats-grid">
+                <div class="stat-card stat-empty">
+                    <div class="stat-title">Empty Slots</div>
+                    <div class="stat-value" id="val-empty">0</div>
+                </div>
+                <div class="stat-card stat-normal">
+                    <div class="stat-value" id="val-normal">0</div>
+                    <div class="stat-title">Normally Occupied</div>
+                </div>
+                <div class="stat-card stat-violation">
+                    <div class="stat-title">Violations</div>
+                    <div class="stat-value" id="val-violation">0</div>
+                </div>
+            </div>
+
+            <div class="logs-section">
+                <h2>Recent Violations (Logs)</h2>
+                <div class="logs-container" id="logs-list">
+                    <!-- Logs injected via JS -->
+                    <div class="log-item" style="border-left-color: #555;">
+                        <span class="log-content">Waiting for data...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function handleStreamError() {
+            document.getElementById('conn-status').textContent = 'Offline';
+            document.getElementById('conn-status').style.backgroundColor = 'var(--violation-color)';
+        }
+
+        async function fetchStats() {
+            try {
+                const response = await fetch('/api/stats');
+                if (!response.ok) throw new Error('Network response was not ok');
+
+                const data = await response.json();
+
+                // Update stats
+                document.getElementById('val-empty').innerText = data.empty || 0;
+                document.getElementById('val-normal').innerText = data.normal || 0;
+                document.getElementById('val-violation').innerText = data.violation || 0;
+
+                // Update logs
+                const logsList = document.getElementById('logs-list');
+
+                if (data.logs && data.logs.length > 0) {
+                    let html = '';
+                    // Assuming logs look like { id: 1, type: "Wrong Slot", time: "12:00" }
+                    data.logs.slice().reverse().forEach(log => {
+                        html += `
+                            <div class="log-item">
+                                <span class="log-time">${log.time}</span>
+                                <span class="log-content">Car ID: <strong>#${log.id}</strong> - ${log.type}</span>
+                            </div>
+                        `;
+                    });
+
+                    // Only update DOM if HTML changed to prevent scroll jumping
+                    if (logsList.innerHTML !== html) {
+                        logsList.innerHTML = html;
+                    }
+                } else {
+                    logsList.innerHTML = `
+                        <div class="log-item" style="border-left-color: #28a745;">
+                            <span class="log-time">Now</span>
+                            <span class="log-content">No active violations. All clear!</span>
+                        </div>
+                    `;
+                }
+
+            } catch (error) {
+                console.error('Error fetching stats:', error);
+            }
+        }
+
+        // Poll stats every 1 second
+        setInterval(fetchStats, 1000);
+        // Initial fetch
+        fetchStats();
+    </script>
+</body>
+
+</html>

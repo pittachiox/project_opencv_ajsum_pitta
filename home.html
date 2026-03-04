@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Parking System</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: #f0f2f5;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        .titlebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: #2c3e50;
+            color: white;
+            padding: 10px 20px;
+            font-size: 16px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+            z-index: 100;
+        }
+
+        .titlebar .dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #27ae60;
+            display: inline-block;
+        }
+
+        .main {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 30px;
+            padding: 20px;
+            margin-top: 60px;
+        }
+
+        .system-title {
+            text-align: center;
+            font-size: 28px;
+            font-weight: bold;
+            color: #222;
+        }
+
+        .system-subtitle {
+            font-size: 14px;
+            color: #777;
+            margin-top: 6px;
+        }
+
+        /* 2 big buttons — mirrors the original WinForms form */
+        .btn-group {
+            display: flex;
+            gap: 24px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .big-btn {
+            width: 220px;
+            height: 160px;
+            border: none;
+            border-radius: 12px;
+            font-size: 18px;
+            font-weight: bold;
+            color: white;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            transition: transform 0.15s, box-shadow 0.15s;
+            text-decoration: none;
+        }
+
+        .big-btn:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+        }
+
+        .big-btn .icon {
+            font-size: 48px;
+            line-height: 1;
+        }
+
+        .big-btn .label {
+            font-size: 15px;
+            text-align: center;
+        }
+
+        .btn-parking {
+            background: linear-gradient(135deg, #4caff0, #1a7abf);
+        }
+
+        .btn-camera {
+            background: linear-gradient(135deg, #e67e22, #d35400);
+        }
+
+        /* Server status indicator */
+        .server-info {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 12px 20px;
+            font-size: 13px;
+            color: #555;
+            text-align: center;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+        }
+
+        .server-info b {
+            color: #27ae60;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="titlebar">
+        <span class="dot"></span>
+        Smart Parking System — Web Interface
+    </div>
+
+    <div class="main">
+        <div>
+            <div class="system-title">Smart Parking System</div>
+            <div class="system-subtitle">เลือกโหมดการใช้งาน / Select Mode</div>
+        </div>
+
+        <!-- 2 big buttons mirroring the original system -->
+        <div class="btn-group">
+
+            <!-- Button 1: Parking Setup (ParkingSetupForm) -->
+            <a href="/setup_parking" class="big-btn btn-parking">
+                <div class="icon">P</div>
+                <div class="label">ตั้งค่าที่จอด<br><span style="font-size:12px;font-weight:normal;">Parking
+                        Setup</span></div>
+            </a>
+
+            <!-- Button 2: View Camera (Online/Offline) -->
+            <a href="/camera" class="big-btn btn-camera">
+                <div class="icon">CAM</div>
+                <div class="label">ดูกล้อง<br><span style="font-size:12px;font-weight:normal;">Camera View</span></div>
+            </a>
+
+        </div>
+
+        <div class="server-info">
+            Server running on <b id="serverAddr">loading...</b> | Port <b>8080</b>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('serverAddr').textContent = window.location.hostname;
+    </script>
+</body>
+
+</html>
