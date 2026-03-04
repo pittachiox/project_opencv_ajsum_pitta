@@ -245,3 +245,10 @@
 [OPENCV] Stream opened successfully! Backend API used: 1 (FFMPEG)
 [SUCCESS] Headless Connected successfully!
 [CONNECT] StartCameraHeadless returned: SUCCESS
+[HTTP] Received /api/connect_online for 172.30.89.122:8080/video
+[CONNECT] Received connect request: 172.30.89.122:8080/video
+[INFO] Headless trying to connect: http://172.30.89.122:8080/video
+[OPENCV] Opening network stream (Auto Backend): http://172.30.89.122:8080/video
+[OPENCV] Stream opened successfully! Backend API used: 1 (FFMPEG)
+[SUCCESS] Headless Connected successfully!
+[CONNECT] StartCameraHeadless returned: SUCCESS

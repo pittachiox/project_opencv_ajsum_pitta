@@ -14,7 +14,8 @@
 
         body {
             font-family: 'Segoe UI', sans-serif;
-            background: #f0f2f5;
+            background: #121212;
+            color: #ffffff;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -27,14 +28,15 @@
             top: 0;
             left: 0;
             right: 0;
-            background: #2c3e50;
-            color: white;
-            padding: 10px 20px;
+            background: #1e1e1e;
+            color: #ffffff;
+            padding: 12px 20px;
             font-size: 15px;
             font-weight: bold;
             display: flex;
             align-items: center;
             gap: 10px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
             z-index: 100;
         }
 
@@ -43,10 +45,15 @@
             text-decoration: none;
             font-size: 13px;
             margin-left: auto;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 6px 14px;
+            border-radius: 20px;
+            transition: background 0.2s, color 0.2s;
         }
 
         .titlebar a:hover {
             color: white;
+            background: rgba(255, 255, 255, 0.25);
         }
 
         .main {
@@ -59,16 +66,16 @@
         }
 
         .page-title {
-            font-size: 22px;
+            font-size: 24px;
             font-weight: bold;
-            color: #222;
+            color: #ffffff;
             text-align: center;
         }
 
         .page-sub {
-            font-size: 13px;
-            color: #777;
-            margin-top: 4px;
+            font-size: 14px;
+            color: #a0a0a0;
+            margin-top: 6px;
             text-align: center;
         }
 
@@ -93,14 +100,14 @@
             align-items: center;
             justify-content: center;
             gap: 12px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
             transition: transform 0.15s, box-shadow 0.15s;
             text-decoration: none;
         }
 
         .big-btn:hover {
             transform: translateY(-4px);
-            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.22);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.6);
         }
 
         .big-btn .icon {

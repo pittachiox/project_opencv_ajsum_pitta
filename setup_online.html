@@ -6,77 +6,112 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Live Camera Setup - Smart Parking</title>
     <style>
-        :root {
-            --bg-color: #121212;
-            --panel-bg: #1e1e1e;
-            --primary-color: #4caff0;
-            --text-main: #ffffff;
-            --text-muted: #a0a0a0;
-            --border-radius: 12px;
-            --success-color: #28a745;
-            --error-color: #dc3545;
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
         }
 
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-main);
-            margin: 0;
-            padding: 20px;
+            background: #121212;
+            color: #ffffff;
             display: flex;
             flex-direction: column;
             align-items: center;
             min-height: 100vh;
         }
 
-        .header {
-            width: 100%;
-            max-width: 600px;
+        /* Top bar - matches home.html and setup_parking.html */
+        .titlebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: #1e1e1e;
+            color: white;
+            padding: 12px 20px;
+            font-size: 16px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+            z-index: 100;
+        }
+
+        .titlebar .dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #27ae60;
+            display: inline-block;
+        }
+
+        .titlebar a {
+            color: #aaa;
+            text-decoration: none;
+            font-size: 14px;
+            margin-left: auto;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 6px 14px;
+            border-radius: 20px;
+            transition: background 0.2s, color 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .titlebar a:hover {
+            background: rgba(255, 255, 255, 0.25);
+            color: white;
+        }
+
+        .main {
             display: flex;
             flex-direction: column;
             align-items: center;
-            margin-bottom: 30px;
-            position: relative;
+            gap: 20px;
+            padding: 20px;
+            margin-top: 80px;
+            /* Account for fixed titlebar */
+            width: 100%;
+            max-width: 500px;
         }
 
-        .back-btn {
-            position: absolute;
-            left: 0;
-            top: 0;
-            color: var(--primary-color);
-            text-decoration: none;
-            font-weight: bold;
-        }
-
-        .header h1 {
-            margin: 0;
+        .page-title {
             font-size: 24px;
-            font-weight: 600;
+            font-weight: bold;
+            color: #ffffff;
+            text-align: center;
+            margin-bottom: 4px;
         }
 
-        .header p {
-            color: var(--text-muted);
-            margin-top: 5px;
+        .page-sub {
+            font-size: 14px;
+            color: #a0a0a0;
+            text-align: center;
+            margin-bottom: 20px;
         }
 
         .setup-card {
-            background: var(--panel-bg);
-            border-radius: var(--border-radius);
+            background: #1e1e1e;
+            border-radius: 12px;
             padding: 30px;
             width: 100%;
-            max-width: 500px;
-            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
         }
 
         .form-group {
-            margin-bottom: 20px;
+            margin-bottom: 16px;
         }
 
         .form-group label {
             display: block;
-            margin-bottom: 8px;
-            font-weight: 500;
-            font-size: 14px;
+            margin-bottom: 6px;
+            font-weight: 600;
+            font-size: 13px;
+            color: #aaa;
         }
 
         .form-control {
@@ -84,39 +119,52 @@
             padding: 12px;
             background: #2a2a2a;
             border: 1px solid #444;
-            border-radius: 6px;
-            color: white;
-            font-size: 16px;
-            transition: border-color 0.2s;
+            border-radius: 8px;
+            color: #ffffff;
+            font-size: 14px;
+            transition: border-color 0.2s, background 0.2s;
             box-sizing: border-box;
+            font-family: inherit;
         }
 
         .form-control:focus {
             outline: none;
-            border-color: var(--primary-color);
+            border-color: #3498db;
+            background: #333;
         }
 
         .help-text {
             font-size: 12px;
-            color: var(--text-muted);
+            color: #888;
             margin-top: 6px;
         }
 
         .btn-connect {
             width: 100%;
             padding: 14px;
-            background: var(--primary-color);
+            background: linear-gradient(135deg, #3498db, #2980b9);
             color: white;
             border: none;
-            border-radius: 6px;
-            font-size: 16px;
+            border-radius: 8px;
+            font-size: 15px;
             font-weight: bold;
             cursor: pointer;
-            transition: background 0.2s;
+            transition: transform 0.15s, box-shadow 0.15s;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            margin-top: 10px;
         }
 
         .btn-connect:hover {
-            background: #3a9fd0;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        .btn-connect:active {
+            transform: translateY(0);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #7f8c8d, #636e72);
         }
 
         /* ============ Popup Modal ============ */
@@ -127,6 +175,7 @@
             right: 0;
             bottom: 0;
             background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(4px);
             z-index: 1000;
             display: none;
             align-items: center;
@@ -134,12 +183,12 @@
         }
 
         .modal-content {
-            background: var(--panel-bg);
+            background: #1e1e1e;
             width: 100%;
-            max-width: 500px;
-            border-radius: var(--border-radius);
-            padding: 25px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+            max-width: 540px;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
             display: flex;
             flex-direction: column;
             gap: 15px;
@@ -150,43 +199,47 @@
             font-weight: bold;
             margin: 0;
             text-align: center;
+            color: #ffffff;
+            border-bottom: 2px solid #333;
+            padding-bottom: 12px;
         }
 
         .log-box {
             background: #0f0f0f;
             border: 1px solid #333;
-            border-radius: 6px;
-            padding: 12px;
+            border-radius: 8px;
+            padding: 16px;
             height: 180px;
             overflow-y: auto;
-            font-family: Consolas, monospace;
+            font-family: Consolas, 'Courier New', monospace;
             font-size: 13px;
-            color: #ccc;
+            color: #e2e8f0;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
         }
 
         .log-box .info {
-            color: #4caff0;
+            color: #38bdf8;
         }
 
         .log-box .success {
-            color: var(--success-color);
+            color: #4ade80;
             font-weight: bold;
         }
 
         .log-box .error {
-            color: var(--error-color);
+            color: #f87171;
             font-weight: bold;
         }
 
         .log-box div {
             margin-bottom: 6px;
-            border-bottom: 1px solid #222;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
             padding-bottom: 4px;
         }
 
         .preview-container {
             display: flex;
-            gap: 10px;
+            gap: 15px;
             margin-top: 10px;
         }
 
@@ -196,53 +249,62 @@
             flex-direction: column;
             align-items: center;
             display: none;
+            background: #2a2a2a;
+            padding: 8px;
+            border-radius: 8px;
+            border: 1px solid #444;
         }
 
         .preview-label {
             font-size: 12px;
-            color: #888;
-            margin-bottom: 5px;
+            font-weight: bold;
+            color: #aaa;
+            margin-bottom: 8px;
+            text-transform: uppercase;
         }
 
         .preview-img {
             width: 100%;
-            border-radius: 6px;
-            border: 1px solid #444;
+            border-radius: 4px;
         }
 
         .modal-actions {
             display: flex;
-            gap: 10px;
-            margin-top: 10px;
+            gap: 12px;
+            margin-top: 15px;
         }
 
         .modal-btn {
             flex: 1;
-            padding: 10px;
+            padding: 12px;
             border: none;
-            border-radius: 6px;
+            border-radius: 8px;
             font-weight: bold;
+            font-size: 14px;
             cursor: pointer;
             text-align: center;
             text-decoration: none;
             color: white;
+            transition: transform 0.15s, box-shadow 0.15s;
         }
 
         .btn-cancel {
-            background: #555;
+            background: linear-gradient(135deg, #555, #333);
         }
 
         .btn-cancel:hover {
-            background: #666;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
         }
 
         .btn-proceed {
-            background: var(--success-color);
+            background: linear-gradient(135deg, #2ecc71, #27ae60);
             display: none;
         }
 
         .btn-proceed:hover {
-            background: #218838;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
         }
 
         .logs-spinner {
@@ -267,41 +329,54 @@
 
 <body>
 
-    <div class="header">
-        <a href="/camera" class="back-btn">← Back</a>
-        <h1>Live Camera Setup</h1>
-        <p>Connect to an IP Camera or Mobile Stream</p>
+    <!-- Title bar matches other pages -->
+    <div class="titlebar">
+        <span class="dot"></span>
+        Smart Parking System — Camera Setup
+        <a href="/camera">← Back to Cameras</a>
     </div>
 
-    <div class="setup-card">
-        <form id="setupForm">
-            <div class="form-group">
-                <label>IP Address</label>
-                <input type="text" id="ipInput" class="form-control" placeholder="192.168.1.100" value="192.168.1.100"
-                    required>
-            </div>
-            <div class="form-group">
-                <label>Port</label>
-                <input type="text" id="portInput" class="form-control" placeholder="8080" value="8080" required>
-            </div>
-            <div class="form-group">
-                <label>Stream Path</label>
-                <input type="text" id="pathInput" class="form-control" placeholder="/video" value="/video">
-                <div class="help-text">Example apps: IP Webcam, DroidCam. Devices must be on same WiFi.</div>
-            </div>
-            <button type="submit" class="btn-connect">Connect Server</button>
-        </form>
-        <div style="margin-top: 15px; text-align: center;">
-            <p style="color: #888; font-size: 14px; margin-bottom: 10px;">— OR —</p>
-            <button type="button" class="btn-connect" style="background: #444;"
-                onclick="document.getElementById('fileInput').click()">Upload Parking Template (.xml) File</button>
-            <input type="file" id="fileInput" accept=".xml" style="display: none;">
+    <div class="main">
+        <div>
+            <div class="page-title">Live Camera Setup</div>
+            <div class="page-sub">Connect to an IP Camera or upload an XML parking template</div>
+        </div>
 
-            <p style="color: #888; font-size: 14px; margin: 15px 0 10px;">— OR PASTE XML —</p>
-            <textarea id="xmlInput" class="form-control" placeholder="<opencv_storage>..."
-                style="height: 100px; resize: vertical; margin-bottom: 10px; font-family: monospace; font-size: 12px;"></textarea>
-            <button type="button" class="btn-connect" style="background: #555;" id="btnPasteXml">Apply Pasted
-                XML</button>
+        <div class="setup-card">
+            <form id="setupForm">
+                <div class="form-group">
+                    <label>IP Address</label>
+                    <input type="text" id="ipInput" class="form-control" placeholder="192.168.1.100"
+                        value="192.168.1.100" required>
+                </div>
+                <div class="form-group">
+                    <label>Port</label>
+                    <input type="text" id="portInput" class="form-control" placeholder="8080" value="8080" required>
+                </div>
+                <div class="form-group">
+                    <label>Stream Path</label>
+                    <input type="text" id="pathInput" class="form-control" placeholder="/video" value="/video">
+                    <div class="help-text">Example apps: IP Webcam, DroidCam. Devices must be on identical Local
+                        Network.</div>
+                </div>
+                <button type="submit" class="btn-connect">Connect to Camera Stream</button>
+            </form>
+
+            <div style="margin-top: 24px; text-align: center; border-top: 1px solid #e2e8f0; padding-top: 20px;">
+                <p style="color: #94a3b8; font-size: 13px; margin-bottom: 12px; font-weight: 600;">— ADVANCED TEMPLATE
+                    OPTIONS —</p>
+
+                <button type="button" class="btn-connect btn-secondary"
+                    onclick="document.getElementById('fileInput').click()">
+                    Upload Parking Template (.xml)
+                </button>
+                <input type="file" id="fileInput" accept=".xml" style="display: none;">
+
+                <p style="color: #94a3b8; font-size: 12px; margin: 20px 0 8px;">OR PASTE RAW XML</p>
+                <textarea id="xmlInput" class="form-control" placeholder="<opencv_storage>..."></textarea>
+                <button type="button" class="btn-connect btn-secondary" id="btnPasteXml" style="margin-top:8px;">Apply
+                    Raw XML</button>
+            </div>
         </div>
     </div>
 

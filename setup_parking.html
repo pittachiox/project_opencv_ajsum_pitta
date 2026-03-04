@@ -13,34 +13,57 @@
         }
 
         body {
-            font-family: 'Segoe UI', sans-serif;
-            background: #f0f2f5;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #121212;
             display: flex;
             flex-direction: column;
             height: 100vh;
             overflow: hidden;
+            color: #ffffff;
         }
 
-        /* Top bar - mirrors the WinForms Form title bar */
+        /* Top bar - matches home.html and camera.html */
         .titlebar {
-            background: #2c3e50;
-            color: white;
-            padding: 8px 16px;
-            font-size: 15px;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: #1e1e1e;
+            color: #ffffff;
+            padding: 12px 20px;
+            font-size: 16px;
             font-weight: bold;
             display: flex;
             align-items: center;
             gap: 10px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+            z-index: 100;
+        }
+
+        .titlebar .dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #4caff0;
+            display: inline-block;
         }
 
         .titlebar a {
             color: #aaa;
             text-decoration: none;
-            font-size: 13px;
+            font-size: 14px;
             margin-left: auto;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 6px 14px;
+            border-radius: 20px;
+            transition: background 0.2s, color 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
         }
 
         .titlebar a:hover {
+            background: rgba(255, 255, 255, 0.25);
             color: white;
         }
 
@@ -48,27 +71,33 @@
         .main {
             display: flex;
             flex: 1;
+            margin-top: 48px;
+            /* Height of the titlebar */
             overflow: hidden;
+            padding: 16px;
+            gap: 16px;
         }
 
-        /* ============ Left Panel (PictureBox equivalent) ============ */
+        /* ============ Left Panel (Canvas) ============ */
         .panel-left {
             flex: 1;
-            background: #f0f2f5;
-            padding: 10px;
             display: flex;
             flex-direction: column;
             overflow: hidden;
             position: relative;
+            background: #1e1e1e;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
         }
 
         #canvas-container {
             flex: 1;
-            background: white;
-            border: 1px solid #ccc;
+            background: #2a2a2a;
             cursor: crosshair;
             position: relative;
             overflow: hidden;
+            border-top-left-radius: 12px;
+            border-top-right-radius: 12px;
         }
 
         #drawCanvas {
@@ -77,86 +106,96 @@
             height: 100%;
         }
 
-        /* Status bar at bottom of canvas - mirrors lblStatus */
+        /* Status bar at bottom of canvas */
         .status-bar {
-            background: #fffdd0;
-            border: 1px solid #ccc;
-            border-top: none;
-            padding: 6px 12px;
+            background: #252525;
+            border-top: 1px solid #333;
+            padding: 10px 16px;
             font-size: 13px;
-            font-weight: bold;
-            color: #444;
-            text-align: center;
+            font-weight: 600;
+            color: #ccc;
+            text-align: left;
+            border-bottom-left-radius: 12px;
+            border-bottom-right-radius: 12px;
         }
 
-        /* ============ Right Panel (panel2 equivalent, 320px) ============ */
+        /* ============ Right Panel (Controls, 340px) ============ */
         .panel-right {
-            width: 320px;
-            background: beige;
-            border-left: 1px solid #ccc;
-            padding: 12px;
+            width: 340px;
+            background: #1e1e1e;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            padding: 20px;
             display: flex;
             flex-direction: column;
-            gap: 8px;
+            gap: 12px;
             overflow-y: auto;
         }
 
         .panel-title {
-            font-size: 16px;
+            font-size: 18px;
             font-weight: bold;
-            color: #222;
+            color: #ffffff;
             text-align: center;
-            padding-bottom: 8px;
-            border-bottom: 1px solid #bbb;
+            padding-bottom: 12px;
+            border-bottom: 2px solid #333;
+            margin-bottom: 4px;
         }
 
-        /* Load buttons row - mirrors btnLoadVideo + btnLoadLive */
+        /* Buttons styling */
         .btn-row {
             display: flex;
-            gap: 8px;
+            gap: 10px;
         }
 
         .btn {
             flex: 1;
-            padding: 10px 6px;
+            padding: 10px 8px;
             border: none;
-            border-radius: 4px;
+            border-radius: 8px;
             font-size: 13px;
             font-weight: bold;
             color: white;
             cursor: pointer;
-            transition: opacity 0.2s;
+            transition: transform 0.15s, box-shadow 0.15s, opacity 0.2s;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
         }
 
-        .btn:hover {
-            opacity: 0.85;
+        .btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        .btn:active:not(:disabled) {
+            transform: translateY(0);
         }
 
         .btn:disabled {
-            background: #aaa !important;
+            background: #444 !important;
+            color: #777 !important;
             cursor: not-allowed;
-            opacity: 0.7;
+            box-shadow: none;
         }
 
         .btn-blue {
-            background: #4caff0;
+            background: linear-gradient(135deg, #3498db, #2980b9);
         }
 
         .btn-yellow {
-            background: #ffc107;
-            color: #333;
+            background: linear-gradient(135deg, #f1c40f, #f39c12);
+            color: #fff;
         }
 
         .btn-green {
-            background: #28a745;
+            background: linear-gradient(135deg, #2ecc71, #27ae60);
         }
 
         .btn-red {
-            background: #dc3545;
+            background: linear-gradient(135deg, #e74c3c, #c0392b);
         }
 
         .btn-purple {
-            background: #6464ff;
+            background: linear-gradient(135deg, #9b59b6, #8e44ad);
         }
 
         .btn-full {
@@ -165,44 +204,58 @@
 
         .divider {
             border: none;
-            border-top: 1px solid #bbb;
-            margin: 4px 0;
+            border-top: 1px solid #333;
+            margin: 8px 0;
         }
 
         label {
-            font-size: 12px;
-            font-weight: bold;
-            color: #444;
+            font-size: 13px;
+            font-weight: 600;
+            color: #aaa;
             display: block;
-            margin-bottom: 2px;
+            margin-bottom: 4px;
         }
 
         input[type="text"],
         textarea {
             width: 100%;
-            padding: 6px;
-            border: 1px solid #999;
-            border-radius: 3px;
+            padding: 10px;
+            border: 1px solid #444;
+            border-radius: 6px;
             font-size: 13px;
-            background: white;
+            font-family: 'Segoe UI', sans-serif;
+            background: #2a2a2a;
+            color: #fff;
+            transition: border-color 0.2s, background 0.2s;
+        }
+
+        input[type="text"]:focus,
+        textarea:focus {
+            outline: none;
+            border-color: #3498db;
+            background: #333;
         }
 
         textarea {
-            resize: none;
-            height: 50px;
+            resize: vertical;
+            min-height: 60px;
         }
 
-        /* Slot list - mirrors listBoxSlots */
+        /* Slot list */
         .list-header {
-            font-size: 13px;
+            font-size: 14px;
             font-weight: bold;
-            color: #222;
+            color: #ffffff;
             margin-top: 4px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
 
         #slotList {
-            border: 1px solid #999;
-            background: #f8f9fa;
+            border: 1px solid #444;
+            background: #2a2a2a;
+            border-radius: 6px;
             list-style: none;
             padding: 0;
             height: 180px;
@@ -212,67 +265,98 @@
         }
 
         #slotList li {
-            padding: 5px 8px;
+            padding: 8px 12px;
             cursor: pointer;
-            border-bottom: 1px solid #e0e0e0;
+            border-bottom: 1px solid #333;
+            transition: background 0.15s;
+            color: #ddd;
+        }
+
+        #slotList li:last-child {
+            border-bottom: none;
         }
 
         #slotList li:hover {
-            background: #d0e8ff;
+            background: #3a3a3a;
         }
 
         #slotList li.selected {
-            background: #b0d4ff;
+            background: #2c4a6b;
             font-weight: bold;
+            color: #63b3ed;
+            border-left: 3px solid #3498db;
         }
 
-        /* Stats panel - mirrors panelStats */
+        /* Stats panel */
         .stats-row {
             display: flex;
-            gap: 4px;
+            gap: 8px;
             margin-top: 4px;
         }
 
         .stat-box {
             flex: 1;
             text-align: center;
-            padding: 4px 2px;
-            border-radius: 3px;
+            padding: 10px 4px;
+            border-radius: 8px;
             color: white;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
         }
 
         .stat-box .count {
-            font-size: 16px;
+            font-size: 20px;
             font-weight: bold;
             display: block;
+            line-height: 1.1;
         }
 
         .stat-box .name {
-            font-size: 10px;
-            font-weight: bold;
+            font-size: 11px;
+            font-weight: 600;
             display: block;
+            margin-top: 4px;
+            opacity: 0.9;
         }
 
         .stat-empty {
-            background: #c8c8c8;
+            background: linear-gradient(135deg, #a0aec0, #718096);
         }
 
         .stat-normal {
-            background: #4caff0;
+            background: linear-gradient(135deg, #3498db, #2980b9);
         }
 
         .stat-violation {
-            background: #dc3545;
+            background: linear-gradient(135deg, #e74c3c, #c0392b);
+        }
+
+        /* Scrollbar styling for a cleaner look */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #555;
+            border-radius: 10px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #777;
         }
     </style>
 </head>
 
 <body>
 
-    <!-- Title bar mirrors WinForms Form header -->
+    <!-- Title bar matches home.html -->
     <div class="titlebar">
-        P Parking Slot Setup - Draw Parking Areas
-        <a href="/">Back to Home</a>
+        <span class="dot" style="background: #f1c40f;"></span>
+        Smart Parking System — Parking Slot Setup
+        <a href="/">← Back to Home</a>
     </div>
 
     <!-- Main area -->
