@@ -20,11 +20,7 @@
 static std::mutex g_logMutex;
 inline void DumpLog(const std::string& msg) {
     std::lock_guard<std::mutex> lock(g_logMutex);
-    std::ofstream ofs("c:\\Users\\HP\\source\\repos\\final\\debug_parking.txt", std::ios::app);
-    if (ofs.is_open()) {
-        ofs << msg << std::endl;
-        ofs.close(); // Ensure it writes immediately
-    }
+    std::cout << msg << std::endl;
 }
 
 class MjpegServer;
