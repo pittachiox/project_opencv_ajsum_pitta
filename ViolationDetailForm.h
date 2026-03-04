@@ -38,7 +38,7 @@ namespace ConsoleApplication3 {
 			lblCarID->Text = System::String::Format(L"Car ID: {0}", carId);
 			lblType->Text = System::String::Format(L"Type: {0}", violationType);
 			lblTime->Text = System::String::Format(L"Time: {0:HH:mm:ss}", captureTime);
-			lblDuration->Text = System::String::Format(L"Clip offset: {0} sec", durationSeconds);
+			lblDuration->Text = System::String::Format(L"Duration: {0} seconds", durationSeconds);
 		}
 
 	protected:
@@ -92,7 +92,7 @@ namespace ConsoleApplication3 {
 
 			// lblCarID
 			this->lblCarID->AutoSize = true;
-			this->lblCarID->Font = (gcnew System::Drawing::Font(L"Segoe UI", 10, System::Drawing::FontStyle::Bold));
+			this->lblCarID->Font = (gcnew System::Drawing::Font(L"Segoe UI", 12, System::Drawing::FontStyle::Bold));
 			this->lblCarID->Location = System::Drawing::Point(20, 330);
 			this->lblCarID->Name = L"lblCarID";
 			this->lblCarID->Size = System::Drawing::Size(100, 21);
@@ -101,7 +101,7 @@ namespace ConsoleApplication3 {
 
 			// lblType
 			this->lblType->AutoSize = true;
-			this->lblType->Font = (gcnew System::Drawing::Font(L"Segoe UI", 10, System::Drawing::FontStyle::Regular));
+			this->lblType->Font = (gcnew System::Drawing::Font(L"Segoe UI", 12, System::Drawing::FontStyle::Bold));
 			this->lblType->Location = System::Drawing::Point(20, 360);
 			this->lblType->Name = L"lblType";
 			this->lblType->Size = System::Drawing::Size(100, 21);
@@ -110,7 +110,7 @@ namespace ConsoleApplication3 {
 
 			// lblTime
 			this->lblTime->AutoSize = true;
-			this->lblTime->Font = (gcnew System::Drawing::Font(L"Segoe UI", 10, System::Drawing::FontStyle::Regular));
+			this->lblTime->Font = (gcnew System::Drawing::Font(L"Segoe UI", 12, System::Drawing::FontStyle::Bold));
 			this->lblTime->Location = System::Drawing::Point(20, 390);
 			this->lblTime->Name = L"lblTime";
 			this->lblTime->Size = System::Drawing::Size(100, 21);
@@ -119,12 +119,12 @@ namespace ConsoleApplication3 {
 
 			// lblDuration
 			this->lblDuration->AutoSize = true;
-			this->lblDuration->Font = (gcnew System::Drawing::Font(L"Segoe UI", 10, System::Drawing::FontStyle::Regular));
+			this->lblDuration->Font = (gcnew System::Drawing::Font(L"Segoe UI", 12, System::Drawing::FontStyle::Bold));
 			this->lblDuration->Location = System::Drawing::Point(20, 420);
 			this->lblDuration->Name = L"lblDuration";
 			this->lblDuration->Size = System::Drawing::Size(100, 21);
 			this->lblDuration->TabIndex = 4;
-			this->lblDuration->Text = L"Clip offset: ";
+			this->lblDuration->Text = L"Duration: ";
 
 			// btnSave
 			this->btnSave->BackColor = System::Drawing::Color::FromArgb(static_cast<System::Int32>(static_cast<System::Byte>(40)), 
@@ -155,9 +155,8 @@ namespace ConsoleApplication3 {
 			this->btnClose->Click += gcnew System::EventHandler(this, &ViolationDetailForm::btnClose_Click);
 
 			// ViolationDetailForm
-			this->AutoScaleDimensions = System::Drawing::SizeF(7, 15); // Segoe UI 9pt base
+			this->AutoScaleDimensions = System::Drawing::SizeF(6, 13);
 			this->AutoScaleMode = System::Windows::Forms::AutoScaleMode::Font;
-			this->Font = (gcnew System::Drawing::Font(L"Segoe UI", 9));
 			this->ClientSize = System::Drawing::Size(440, 510);
 			this->Controls->Add(this->btnSave);
 			this->Controls->Add(this->btnClose);

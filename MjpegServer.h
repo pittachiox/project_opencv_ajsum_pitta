@@ -13,81 +13,70 @@
 #include <vector>
 #include <string>
 #include <iostream>
-#include <algorithm>
+#include <functional>
+#include <fstream>
+#include <mutex>
+
+static std::mutex g_logMutex;
+inline void DumpLog(const std::string& msg) {
+    std::lock_guard<std::mutex> lock(g_logMutex);
+    std::ofstream ofs("c:\\Users\\HP\\source\\repos\\final\\debug_parking.txt", std::ios::app);
+    if (ofs.is_open()) {
+        ofs << msg << std::endl;
+        ofs.close(); // Ensure it writes immediately
+    }
+}
+
+class MjpegServer;
+__declspec(selectany) MjpegServer* g_globalWebServer = nullptr;
+using ConnectOnlineCallback = std::function<bool(std::string, std::string, std::string)>;
 
 #pragma comment(lib, "ws2_32.lib")
 
-// ============================================================
-//  MjpegServer
-//  Routes:
-//    GET /        → HTML page (browser opens this, JS connects to /events)
-//    GET /stream  → MJPEG video stream
-//    GET /events  → SSE log stream (for F12 console)
-// ============================================================
 class MjpegServer {
 private:
     SOCKET serverSocket;
     std::atomic<bool> isRunning;
     std::thread serverThread;
-
-    // MJPEG clients
+    
     std::vector<SOCKET> clientSockets;
     std::mutex clientsMutex;
-
+    
     cv::Mat latestFrame;
     std::mutex frameMutex;
     std::condition_variable frameCV;
     bool newFrameAvailable = false;
-
-    // SSE clients - we send messages to all of them
-    std::vector<SOCKET> sseSockets;
-    std::mutex sseMutex;
-
+    
     int port;
 
-    // --------------------------------------------------------
-    //  Parse request: returns path, also extracts Range header
-    // --------------------------------------------------------
-    std::string ParseRequest(SOCKET clientSocket, std::string& outRangeHeader) {
-        char buf[4096] = {};
-        int received = recv(clientSocket, buf, sizeof(buf) - 1, 0);
-        if (received <= 0) return "";
+    std::string latestStatsJson = "{\"empty\":0,\"normal\":0,\"violation\":0,\"logs\":[]}";
+    std::mutex statsMutex;
 
-        std::string req(buf, received);
+    using SaveTemplateCallback = std::function<bool(std::string)>;
+    using GetFrameCallback = std::function<cv::Mat()>;
+    ConnectOnlineCallback onConnectOnline;
+    SaveTemplateCallback onSaveTemplate;
+    GetFrameCallback onGetFrame;
+    GetFrameCallback onGetRawFrame;
+public:
+    void SetConnectOnlineCallback(ConnectOnlineCallback cb) { onConnectOnline = cb; }
+    void SetSaveTemplateCallback(SaveTemplateCallback cb) { onSaveTemplate = cb; }
+    void SetGetFrameCallback(GetFrameCallback cb) { onGetFrame = cb; }
+    void SetGetRawFrameCallback(GetFrameCallback cb) { onGetRawFrame = cb; }
+private:
 
-        // First line: "GET /path HTTP/1.1"
-        size_t start = req.find(' ');
-        if (start == std::string::npos) return "/";
-        size_t end = req.find(' ', start + 1);
-        if (end == std::string::npos) return "/";
-        std::string path = req.substr(start + 1, end - start - 1);
-
-        // Extract Range header (e.g. "bytes=0-" or "bytes=1024-2047")
-        outRangeHeader = "";
-        size_t ri = req.find("Range: bytes=");
-        if (ri != std::string::npos) {
-            size_t re = req.find('\r', ri);
-            if (re == std::string::npos) re = req.size();
-            outRangeHeader = req.substr(ri + 13, re - ri - 13);
-        }
-        return path;
-    }
-
-    // --------------------------------------------------------
-    //  Server accept loop
-    // --------------------------------------------------------
     void ServerLoop() {
         while (isRunning) {
             fd_set readfds;
             FD_ZERO(&readfds);
             FD_SET(serverSocket, &readfds);
-
+            
             timeval timeout;
             timeout.tv_sec = 0;
-            timeout.tv_usec = 100000;
-
+            timeout.tv_usec = 100000; // 100ms timeout
+            
             int activity = select(0, &readfds, NULL, NULL, &timeout);
-
+            
             if (activity > 0 && FD_ISSET(serverSocket, &readfds)) {
                 SOCKET clientSocket = accept(serverSocket, NULL, NULL);
                 if (clientSocket != INVALID_SOCKET) {
@@ -98,262 +87,481 @@ private:
     }
 
     void HandleClient(SOCKET clientSocket) {
-        std::string rangeHeader;
-        std::string path = ParseRequest(clientSocket, rangeHeader);
+        char buffer[2048];
+        int bytesRead = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
+        if (bytesRead <= 0) {
+            closesocket(clientSocket);
+            return;
+        }
+        buffer[bytesRead] = '\0';
+        std::string request(buffer);
+        
+        size_t firstSpace = request.find(' ');
+        size_t secondSpace = request.find(' ', firstSpace + 1);
+        if (firstSpace == std::string::npos || secondSpace == std::string::npos) {
+            closesocket(clientSocket);
+            return;
+        }
+        
+        std::string method = request.substr(0, firstSpace);
+        std::string path = request.substr(firstSpace + 1, secondSpace - firstSpace - 1);
+        // Strip query string (e.g. ?t=123456) before route matching
+        size_t qpos = path.find('?');
+        if (qpos != std::string::npos) path = path.substr(0, qpos);
 
-        if (path == "/events") {
-            HandleSSE(clientSocket);
-        } else if (path == "/stream") {
-            HandleMjpeg(clientSocket);
-        } else if (path.substr(0, 12) == "/violations/") {
-            std::string filename = path.substr(12);
-            std::string filepath = "C:\\logpic\\" + filename;
-            ServeFile(clientSocket, filepath, "image/jpeg", rangeHeader);
-        } else if (path.substr(0, 10) == "/locvideo/") {
-            std::string relpath = path.substr(10);
-            std::replace(relpath.begin(), relpath.end(), '/', '\\');
-            std::string filepath = "C:\\locvideo\\" + relpath;
-            ServeFile(clientSocket, filepath, "video/webm", rangeHeader);
+        if (path == "/video") {
+            ServeMjpegStream(clientSocket);
+        } else if (path == "/api/stats") {
+            ServeStats(clientSocket);
+        } else if (path == "/api/current_frame") {
+            ServeCurrentFrame(clientSocket);
+        } else if (path == "/api/raw_frame") {
+            ServeRawFrame(clientSocket);
+        } else if (path == "/api/save_template" && request.find("POST") == 0) {
+            ServeSaveTemplate(clientSocket, request);
+        } else if (path == "/api/connect_online" && request.find("POST") == 0) {
+            ServeConnectOnline(clientSocket, request);
+        } else if (path == "/api/anomaly_events") {
+            ServeAnomalyEvents(clientSocket, request);
+        } else if (path == "/api/parking_areas") {
+            ServeParkingAreas(clientSocket, request);
+        } else if (path.find("/locvideo/") == 0) {
+            ServeFileDirectly(clientSocket, "C:" + path);
+        } else if (path.find("/smart_parking_violations/") == 0) {
+            ServeFileDirectly(clientSocket, "C:" + path);
+        } else if (path == "/setup_online") {
+            ServeHtml(clientSocket, "setup_online.html");
+        } else if (path == "/setup_parking") {
+            ServeHtml(clientSocket, "setup_parking.html");
+        } else if (path == "/camera") {
+            ServeHtml(clientSocket, "camera.html");
+        } else if (path == "/dashboard") {
+            ServeHtml(clientSocket, "index.html");
+        } else if (path == "/" || path == "/index.html" || path == "/home") {
+            ServeHtml(clientSocket, "home.html");
         } else {
-            HandlePage(clientSocket);
+            std::string notFound = "HTTP/1.1 404 Not Found\r\nContent-Length: 9\r\n\r\nNot Found";
+            send(clientSocket, notFound.c_str(), notFound.length(), 0);
+            closesocket(clientSocket);
         }
     }
 
-    // --------------------------------------------------------
-    //  Serve a file from disk — supports HTTP Range requests (206)
-    //  Required for video: Chrome seeks to moov atom via Range
-    // --------------------------------------------------------
-    void ServeFile(SOCKET clientSocket, const std::string& filepath,
-                   const std::string& contentType, const std::string& rangeHeader) {
+    // ==========================================
+    // [PHASE 3] NEW ENDPOINTS FOR JSON API
+    // ==========================================
+    void ServeAnomalyEvents(SOCKET clientSocket, const std::string& request) {
+        // Default to today
+        SYSTEMTIME st;
+        GetLocalTime(&st);
+        char defaultDate[32];
+        sprintf_s(defaultDate, sizeof(defaultDate), "%04d%02d%02d", st.wYear, st.wMonth, st.wDay);
+        std::string dateTarget = defaultDate;
+
+        // Extract ?date=YYYY-MM-DD to YYYYMMDD
+        size_t queryPos = request.find("date=");
+        if (queryPos != std::string::npos) {
+            size_t spacePos = request.find(' ', queryPos);
+            size_t ampPos = request.find('&', queryPos);
+            size_t endPos = (ampPos != std::string::npos && ampPos < spacePos) ? ampPos : spacePos;
+            
+            std::string dateStr = request.substr(queryPos + 5, endPos - (queryPos + 5));
+            dateTarget = "";
+            for(char c : dateStr) if (c != '-') dateTarget += c;
+        }
+
+        int limit = -1;
+        size_t limitPos = request.find("limit=");
+        if (limitPos != std::string::npos) {
+            size_t spacePos = request.find(' ', limitPos);
+            size_t ampPos = request.find('&', limitPos);
+            size_t endPos = (ampPos != std::string::npos && ampPos < spacePos) ? ampPos : spacePos;
+            
+            try {
+                limit = std::stoi(request.substr(limitPos + 6, endPos - (limitPos + 6)));
+            } catch(...) {}
+        }
+
+        std::string dirPath = "C:\\loc_json\\anomaly_events\\" + dateTarget;
+        ServeJsonDirectoryAsArray(clientSocket, dirPath, limit);
+    }
+
+    void ServeParkingAreas(SOCKET clientSocket, const std::string& request) {
+        // Default to today
+        SYSTEMTIME st;
+        GetLocalTime(&st);
+        char defaultDate[32];
+        sprintf_s(defaultDate, sizeof(defaultDate), "%04d%02d%02d", st.wYear, st.wMonth, st.wDay);
+        std::string dateTarget = defaultDate;
+
+        // Extract ?date=YYYY-MM-DD
+        size_t queryPos = request.find("date=");
+        if (queryPos != std::string::npos) {
+            size_t spacePos = request.find(' ', queryPos);
+            size_t ampPos = request.find('&', queryPos);
+            size_t endPos = (ampPos != std::string::npos && ampPos < spacePos) ? ampPos : spacePos;
+            
+            std::string dateStr = request.substr(queryPos + 5, endPos - (queryPos + 5));
+            dateTarget = "";
+            for(char c : dateStr) if (c != '-') dateTarget += c;
+        }
+
+        int limit = -1;
+        size_t limitPos = request.find("limit=");
+        if (limitPos != std::string::npos) {
+            size_t spacePos = request.find(' ', limitPos);
+            size_t ampPos = request.find('&', limitPos);
+            size_t endPos = (ampPos != std::string::npos && ampPos < spacePos) ? ampPos : spacePos;
+            
+            try {
+                limit = std::stoi(request.substr(limitPos + 6, endPos - (limitPos + 6)));
+            } catch(...) {}
+        }
+
+        std::string dirPath = "C:\\loc_json\\parking_areas\\" + dateTarget;
+        ServeJsonDirectoryAsArray(clientSocket, dirPath, limit);
+    }
+
+    void ServeJsonDirectoryAsArray(SOCKET clientSocket, const std::string& dirPath, int limit = -1) {
+        std::vector<std::string> fileNames;
+        WIN32_FIND_DATAA findData;
+        HANDLE hFind = FindFirstFileA((dirPath + "\\*.json").c_str(), &findData);
+        
+        if (hFind != INVALID_HANDLE_VALUE) {
+            do {
+                if (!(findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+                    fileNames.push_back(findData.cFileName);
+                }
+            } while (FindNextFileA(hFind, &findData));
+            FindClose(hFind);
+        }
+        
+        // Sort descending (newest epoch first)
+        std::sort(fileNames.begin(), fileNames.end(), std::greater<std::string>());
+        
+        std::string jsonContent = "[";
+        bool first = true;
+        int count = 0;
+        
+        for (const std::string& fileName : fileNames) {
+            if (limit > 0 && count >= limit) break;
+            
+            std::string filePath = dirPath + "\\" + fileName;
+            std::ifstream inFile(filePath);
+            if (inFile.is_open()) {
+                std::stringstream buffer;
+                buffer << inFile.rdbuf();
+                
+                if (!first) jsonContent += ",";
+                jsonContent += buffer.str();
+                first = false;
+                
+                inFile.close();
+                count++;
+            }
+        }
+        
+        jsonContent += "]";
+
+        std::string header = "HTTP/1.1 200 OK\r\n"
+                             "Content-Type: application/json; charset=utf-8\r\n"
+                             "Access-Control-Allow-Origin: *\r\n"
+                             "Connection: close\r\n"
+                             "Content-Length: " + std::to_string(jsonContent.size()) + "\r\n\r\n";
+        
+        send(clientSocket, header.c_str(), header.length(), 0);
+        send(clientSocket, jsonContent.c_str(), jsonContent.length(), 0);
+        closesocket(clientSocket);
+    }
+
+    void ServeFileDirectly(SOCKET clientSocket, const std::string& fsPath) {
+        // Strip out the query param safely (e.g. ?time=45)
+        std::string cleanPath = fsPath;
+        size_t queryPos = cleanPath.find("?");
+        if (queryPos != std::string::npos) {
+            cleanPath = cleanPath.substr(0, queryPos);
+        }
+        // Force replace / with \\ for windows paths just in case
+        std::replace(cleanPath.begin(), cleanPath.end(), '/', '\\');
+
+        std::ifstream file(cleanPath, std::ios::binary | std::ios::ate);
+        if (!file.is_open()) {
+            std::string notFound = "HTTP/1.1 404 Not Found\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: 9\r\n\r\nNot Found";
+            send(clientSocket, notFound.c_str(), notFound.length(), 0);
+            closesocket(clientSocket);
+            return;
+        }
+
+        std::streamsize size = file.tellg();
+        file.seekg(0, std::ios::beg);
+
+        std::string contentType = "application/octet-stream";
+        if (cleanPath.find(".jpg") != std::string::npos) contentType = "image/jpeg";
+        else if (cleanPath.find(".webm") != std::string::npos) contentType = "video/webm";
+
+        std::string responseHeader = "HTTP/1.1 200 OK\r\n"
+                                     "Content-Type: " + contentType + "\r\n"
+                                     "Access-Control-Allow-Origin: *\r\n"
+                                     "Connection: close\r\n"
+                                     "Content-Length: " + std::to_string(size) + "\r\n\r\n";
+                                     
+        send(clientSocket, responseHeader.c_str(), responseHeader.length(), 0);
+
+        char buffer[8192];
+        while (file.read(buffer, sizeof(buffer))) {
+            send(clientSocket, buffer, sizeof(buffer), 0);
+        }
+        if (file.gcount() > 0) {
+            send(clientSocket, buffer, file.gcount(), 0);
+        }
+        
+        closesocket(clientSocket);
+    }
+
+    void ServeStats(SOCKET clientSocket) {
+        std::string json;
+        {
+            std::lock_guard<std::mutex> lock(statsMutex);
+            json = latestStatsJson;
+        }
+        std::string header = "HTTP/1.1 200 OK\r\n"
+                             "Content-Type: application/json; charset=utf-8\r\n"
+                             "Access-Control-Allow-Origin: *\r\n"
+                             "Connection: close\r\n"
+                             "Content-Length: " + std::to_string(json.length()) + "\r\n\r\n";
+        send(clientSocket, header.c_str(), header.length(), 0);
+        send(clientSocket, json.c_str(), json.length(), 0);
+        closesocket(clientSocket);
+    }
+
+    void ServeConnectOnline(SOCKET clientSocket, const std::string& request) {
+        std::string ip = "192.168.1.100", port = "8080", reqPath = "/video";
+        
+        size_t bodyStart = request.find("\r\n\r\n");
+        if (bodyStart != std::string::npos) {
+            std::string body = request.substr(bodyStart + 4);
+            auto extString = [](const std::string& b, const std::string& key) {
+                size_t p = b.find("\"" + key + "\":");
+                if (p != std::string::npos) {
+                    size_t s = b.find("\"", p + key.length() + 3);
+                    if (s != std::string::npos) {
+                        size_t e = b.find("\"", s + 1);
+                        if (e != std::string::npos) return b.substr(s + 1, e - s - 1);
+                    }
+                }
+                return std::string("");
+            };
+            std::string parsedIp = extString(body, "ip");
+            if (!parsedIp.empty()) ip = parsedIp;
+            std::string parsedPort = extString(body, "port");
+            if (!parsedPort.empty()) port = parsedPort;
+            std::string parsedPath = extString(body, "path");
+            if (!parsedPath.empty()) reqPath = parsedPath;
+        }
+
+        // Fire the connection in a background thread — don't block the HTTP response
+        DumpLog("[HTTP] Received /api/connect_online for " + ip + ":" + port + reqPath);
+
+        if (onConnectOnline) {
+            std::string capturedIp = ip, capturedPort = port, capturedPath = reqPath;
+            ConnectOnlineCallback cb = onConnectOnline;
+            std::thread([cb, capturedIp, capturedPort, capturedPath]() {
+                cb(capturedIp, capturedPort, capturedPath);
+            }).detach();
+        }
+
+        // Return 202 Accepted immediately
+        std::string jsonResponse = "{\"status\":\"connecting\"}";
+        std::string response = 
+            "HTTP/1.1 202 Accepted\r\n"
+            "Content-Type: application/json\r\n"
+            "Access-Control-Allow-Origin: *\r\n"
+            "Content-Length: " + std::to_string(jsonResponse.length()) + "\r\n"
+            "Connection: close\r\n\r\n" + jsonResponse;
+
+        send(clientSocket, response.c_str(), response.length(), 0);
+        closesocket(clientSocket);
+    }
+
+    void ServeCurrentFrame(SOCKET clientSocket) {
+        if (!onGetFrame) {
+            std::string r = "HTTP/1.1 503 Service Unavailable\r\n\r\n";
+            send(clientSocket, r.c_str(), r.length(), 0);
+            closesocket(clientSocket);
+            return;
+        }
+        cv::Mat frame = onGetFrame();
+        if (frame.empty()) {
+            frame = cv::Mat(480, 640, CV_8UC3, cv::Scalar(50, 50, 50));
+            cv::putText(frame, "Waiting for AI Processing...", cv::Point(80, 240), cv::FONT_HERSHEY_SIMPLEX, 1, cv::Scalar(255, 255, 255), 2);
+        }
+
+        std::vector<uchar> buf;
+        std::vector<int> params = { cv::IMWRITE_JPEG_QUALITY, 80 };
+        cv::imencode(".jpg", frame, buf, params);
+        std::string response = "HTTP/1.1 200 OK\r\n"
+                               "Content-Type: image/jpeg\r\n"
+                               "Content-Length: " + std::to_string(buf.size()) + "\r\n"
+                               "Cache-Control: no-cache\r\n"
+                               "Connection: close\r\n\r\n";
+        send(clientSocket, response.c_str(), response.length(), 0);
+        send(clientSocket, (const char*)buf.data(), buf.size(), 0);
+        closesocket(clientSocket);
+    }
+
+    void ServeRawFrame(SOCKET clientSocket) {
+        if (!onGetRawFrame) {
+            std::string r = "HTTP/1.1 503 Service Unavailable\r\n\r\n";
+            send(clientSocket, r.c_str(), r.length(), 0);
+            closesocket(clientSocket);
+            return;
+        }
+        cv::Mat frame = onGetRawFrame();
+        if (frame.empty()) {
+            frame = cv::Mat(480, 640, CV_8UC3, cv::Scalar(50, 50, 50));
+            cv::putText(frame, "Waiting for stream...", cv::Point(150, 240), cv::FONT_HERSHEY_SIMPLEX, 1, cv::Scalar(255, 255, 255), 2);
+        }
+
+        std::vector<uchar> buf;
+        std::vector<int> params = { cv::IMWRITE_JPEG_QUALITY, 80 };
+        cv::imencode(".jpg", frame, buf, params);
+        std::string response = "HTTP/1.1 200 OK\r\n"
+                               "Content-Type: image/jpeg\r\n"
+                               "Content-Length: " + std::to_string(buf.size()) + "\r\n"
+                               "Cache-Control: no-cache\r\n"
+                               "Connection: close\r\n\r\n";
+        send(clientSocket, response.c_str(), response.length(), 0);
+        send(clientSocket, (const char*)buf.data(), buf.size(), 0);
+        closesocket(clientSocket);
+    }
+
+    void ServeSaveTemplate(SOCKET clientSocket, const std::string& request) {
+        size_t bodyPos = request.find("\r\n\r\n");
+        if (bodyPos == std::string::npos) {
+            closesocket(clientSocket);
+            return;
+        }
+        std::string body = request.substr(bodyPos + 4);
+
+        bool success = false;
+        if (onSaveTemplate) {
+            success = onSaveTemplate(body);
+        }
+
+        std::string jsonResponse = "{\"status\":\"" + std::string(success ? "success" : "error") + "\"}";
+        std::string response = 
+            "HTTP/1.1 200 OK\r\n"
+            "Content-Type: application/json\r\n"
+            "Access-Control-Allow-Origin: *\r\n"
+            "Content-Length: " + std::to_string(jsonResponse.length()) + "\r\n"
+            "Connection: close\r\n\r\n" + jsonResponse;
+
+        send(clientSocket, response.c_str(), response.length(), 0);
+        closesocket(clientSocket);
+    }
+
+    void ServeHtml(SOCKET clientSocket, const std::string& filename) {
         FILE* f = nullptr;
-        if (fopen_s(&f, filepath.c_str(), "rb") != 0 || !f) {
-            std::string err = "HTTP/1.1 404 Not Found\r\nContent-Length: 9\r\nConnection: close\r\n\r\nNot Found";
-            send(clientSocket, err.c_str(), (int)err.size(), 0);
+        fopen_s(&f, filename.c_str(), "rb");
+        if (!f) {
+            std::string msg = "HTTP/1.1 404 Not Found\r\n\r\nFile not found. Please create index.html in the app directory.";
+            send(clientSocket, msg.c_str(), msg.length(), 0);
             closesocket(clientSocket);
             return;
         }
         fseek(f, 0, SEEK_END);
-        long fileSize = ftell(f);
+        long fsize = ftell(f);
+        fseek(f, 0, SEEK_SET);
 
-        long rangeStart = 0, rangeEnd = fileSize - 1;
-        bool isRangeRequest = !rangeHeader.empty();
-
-        if (isRangeRequest) {
-            size_t dash = rangeHeader.find('-');
-            if (dash != std::string::npos) {
-                std::string sStr = rangeHeader.substr(0, dash);
-                std::string eStr = rangeHeader.substr(dash + 1);
-                if (!sStr.empty()) rangeStart = std::stol(sStr);
-                if (!eStr.empty()) rangeEnd   = std::stol(eStr);
-            }
-            if (rangeEnd >= fileSize) rangeEnd = fileSize - 1;
+        std::vector<char> content(fsize);
+        if (fsize > 0) {
+            fread(content.data(), 1, fsize, f);
         }
-
-        long sendSize = rangeEnd - rangeStart + 1;
-        fseek(f, rangeStart, SEEK_SET);
-
-        // Build and send HTTP header
-        std::string header;
-        if (isRangeRequest) {
-            header =
-                "HTTP/1.1 206 Partial Content\r\n"
-                "Content-Type: " + contentType + "\r\n"
-                "Content-Range: bytes " + std::to_string(rangeStart) + "-" +
-                    std::to_string(rangeEnd) + "/" + std::to_string(fileSize) + "\r\n"
-                "Content-Length: " + std::to_string(sendSize) + "\r\n"
-                "Accept-Ranges: bytes\r\n"
-                "Access-Control-Allow-Origin: *\r\n"
-                "Connection: close\r\n\r\n";
-        } else {
-            header =
-                "HTTP/1.1 200 OK\r\n"
-                "Content-Type: " + contentType + "\r\n"
-                "Content-Length: " + std::to_string(sendSize) + "\r\n"
-                "Accept-Ranges: bytes\r\n"
-                "Access-Control-Allow-Origin: *\r\n"
-                "Connection: close\r\n\r\n";
-        }
-        send(clientSocket, header.c_str(), (int)header.size(), 0);
-
-        // *** Stream file in 64KB chunks — single send() can't handle large files ***
-        const int CHUNK = 65536;
-        std::vector<char> chunk(CHUNK);
-        long remaining = sendSize;
-        while (remaining > 0) {
-            int toRead = (int)(std::min((long)CHUNK, remaining));
-            int bytesRead = (int)fread(chunk.data(), 1, toRead, f);
-            if (bytesRead <= 0) break;
-            const char* ptr = chunk.data();
-            int left = bytesRead;
-            while (left > 0) {
-                int sent = send(clientSocket, ptr, left, 0);
-                if (sent <= 0) goto done; // connection closed
-                ptr  += sent;
-                left -= sent;
-            }
-            remaining -= bytesRead;
-        }
-        done:
         fclose(f);
+
+        std::string header = "HTTP/1.1 200 OK\r\n"
+                             "Content-Type: text/html; charset=utf-8\r\n"
+                             "Connection: close\r\n"
+                             "Content-Length: " + std::to_string(fsize) + "\r\n\r\n";
+        send(clientSocket, header.c_str(), header.length(), 0);
+        if (fsize > 0) {
+            send(clientSocket, content.data(), fsize, 0);
+        }
         closesocket(clientSocket);
     }
 
-    // --------------------------------------------------------
-    //  Route: / — HTML page
-    // --------------------------------------------------------
-    void HandlePage(SOCKET clientSocket) {
-        // HTML page that:
-        //  1. Shows MJPEG video
-        //  2. Connects to /events (SSE) and console.log() every message
-        std::string html = R"html(<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>Parking Monitor</title>
-<style>
-  body { margin:0; background:#111; color:#0f0; font-family:monospace; }
-  h2   { margin:8px; color:#0f0; }
-  img  { display:block; max-width:100%; border:2px solid #0f0; }
-  #stats { padding:8px; font-size:14px; }
-</style>
-</head>
-<body>
-<h2>&#128247; Parking Monitor — Live</h2>
-<img src="/stream" alt="Camera stream">
-<div id="stats">Connecting to log stream...</div>
-<script>
-(function(){
-  var statsEl = document.getElementById('stats');
-  var es = new EventSource('/events');
-
-  es.onmessage = function(e){
-    try {
-      var d = JSON.parse(e.data);
-      // Print to F12 console
-      console.log('[PARKING]', JSON.stringify(d));
-      // Update on-page stats too
-      statsEl.textContent =
-        'Empty: ' + d.available_slots +
-        ' | Occupied: ' + d.occupied_slots +
-        ' | Violations: ' + d.violation_slots +
-        ' | ' + d.timestamp;
-    } catch(err) {
-      console.warn('[PARKING] parse error', err);
-    }
-  };
-
-  es.onerror = function(){
-    console.warn('[PARKING] SSE connection lost, retrying...');
-    statsEl.textContent = 'Connection lost — retrying...';
-  };
-})();
-</script>
-</body>
-</html>)html";
-
-        std::string response =
-            "HTTP/1.1 200 OK\r\n"
-            "Content-Type: text/html; charset=utf-8\r\n"
-            "Content-Length: " + std::to_string(html.size()) + "\r\n"
-            "Connection: close\r\n\r\n" + html;
-
-        send(clientSocket, response.c_str(), (int)response.size(), 0);
-        closesocket(clientSocket);
-    }
-
-    // --------------------------------------------------------
-    //  Route: /stream — MJPEG video
-    // --------------------------------------------------------
-    void HandleMjpeg(SOCKET clientSocket) {
+    void ServeMjpegStream(SOCKET clientSocket) {
+        // Add to client list
         {
             std::lock_guard<std::mutex> lock(clientsMutex);
             clientSockets.push_back(clientSocket);
         }
-
-        std::string httpHeader =
-            "HTTP/1.1 200 OK\r\n"
-            "Content-Type: multipart/x-mixed-replace; boundary=mjpegstream\r\n"
-            "Access-Control-Allow-Origin: *\r\n"
-            "Connection: close\r\n\r\n";
-        send(clientSocket, httpHeader.c_str(), (int)httpHeader.length(), 0);
+        
+        // HTTP Stream Header
+        std::string httpHeader = "HTTP/1.1 200 OK\r\n"
+                                 "Content-Type: multipart/x-mixed-replace; boundary=mjpegstream\r\n"
+                                 "Connection: keep-alive\r\n"
+                                 "Cache-Control: no-cache\r\n"
+                                 "Pragma: no-cache\r\n\r\n";
+        send(clientSocket, httpHeader.c_str(), httpHeader.length(), 0);
 
         std::vector<uchar> buffer;
-        std::vector<int> params = {cv::IMWRITE_JPEG_QUALITY, 70};
+        std::vector<int> params = {cv::IMWRITE_JPEG_QUALITY, 70}; 
 
         while (isRunning) {
             cv::Mat frameToSend;
             {
                 std::unique_lock<std::mutex> lock(frameMutex);
-                if (!frameCV.wait_for(lock, std::chrono::milliseconds(500),
-                        [this] { return newFrameAvailable || !isRunning; })) {
-                    int error = 0; socklen_t len = sizeof(error);
-                    if (getsockopt(clientSocket, SOL_SOCKET, SO_ERROR, (char*)&error, &len) != 0 || error != 0)
-                        break;
+                if (!frameCV.wait_for(lock, std::chrono::milliseconds(500), [this] { return newFrameAvailable || !isRunning; })) {
+                    // Timeout, check connection
+                    int error = 0;
+                    socklen_t len = sizeof(error);
+                    if (getsockopt(clientSocket, SOL_SOCKET, SO_ERROR, (char*)&error, &len) != 0 || error != 0) {
+                        break; // Connection is dead
+                    }
+                    continue; // Timeout, no new frame, loop again
+                }
+                
+                if (!isRunning) break;
+                
+                if (latestFrame.empty()) {
+                    newFrameAvailable = false;
                     continue;
                 }
-                if (!isRunning) break;
-                if (latestFrame.empty()) { newFrameAvailable = false; continue; }
+                
+                // Copy frame to avoid holding lock during encoding
                 frameToSend = latestFrame.clone();
                 newFrameAvailable = false;
             }
 
             if (!frameToSend.empty()) {
                 cv::imencode(".jpg", frameToSend, buffer, params);
-
-                std::string frameHeader =
-                    "--mjpegstream\r\n"
-                    "Content-Type: image/jpeg\r\n"
-                    "Content-Length: " + std::to_string(buffer.size()) + "\r\n\r\n";
-
-                if (send(clientSocket, frameHeader.c_str(), (int)frameHeader.length(), 0) == SOCKET_ERROR) break;
-                if (send(clientSocket, (const char*)buffer.data(), (int)buffer.size(), 0) == SOCKET_ERROR) break;
-                if (send(clientSocket, "\r\n", 2, 0) == SOCKET_ERROR) break;
+                
+                std::string frameHeader = "--mjpegstream\r\n"
+                                          "Content-Type: image/jpeg\r\n"
+                                          "Content-Length: " + std::to_string(buffer.size()) + "\r\n\r\n";
+                
+                // Send Header
+                int bytesSent = send(clientSocket, frameHeader.c_str(), frameHeader.length(), 0);
+                if (bytesSent == SOCKET_ERROR) break;
+                
+                // Send Image Data
+                bytesSent = send(clientSocket, (const char*)buffer.data(), buffer.size(), 0);
+                if (bytesSent == SOCKET_ERROR) break;
+                
+                // Send Footer
+                std::string frameFooter = "\r\n";
+                bytesSent = send(clientSocket, frameFooter.c_str(), frameFooter.length(), 0);
+                if (bytesSent == SOCKET_ERROR) break;
             }
         }
 
+        // Remove from client list
         {
             std::lock_guard<std::mutex> lock(clientsMutex);
             auto it = std::find(clientSockets.begin(), clientSockets.end(), clientSocket);
-            if (it != clientSockets.end()) clientSockets.erase(it);
-        }
-        closesocket(clientSocket);
-    }
-
-    // --------------------------------------------------------
-    //  Route: /events — SSE log stream
-    // --------------------------------------------------------
-    void HandleSSE(SOCKET clientSocket) {
-        {
-            std::lock_guard<std::mutex> lock(sseMutex);
-            sseSockets.push_back(clientSocket);
-        }
-
-        // SSE headers — keep connection alive
-        std::string header =
-            "HTTP/1.1 200 OK\r\n"
-            "Content-Type: text/event-stream\r\n"
-            "Cache-Control: no-cache\r\n"
-            "Access-Control-Allow-Origin: *\r\n"
-            "Connection: keep-alive\r\n\r\n";
-        send(clientSocket, header.c_str(), (int)header.length(), 0);
-
-        // Send an initial comment to confirm the stream is live
-        std::string hello = ": connected\n\n";
-        send(clientSocket, hello.c_str(), (int)hello.length(), 0);
-
-        // Keep thread alive — PushLogEvent() sends data; we just wait here
-        while (isRunning) {
-            // Heartbeat every 15s to keep the connection alive through proxies
-            Sleep(15000);
-            if (!isRunning) break;
-            std::string hb = ": heartbeat\n\n";
-            if (send(clientSocket, hb.c_str(), (int)hb.length(), 0) == SOCKET_ERROR) break;
-        }
-
-        {
-            std::lock_guard<std::mutex> lock(sseMutex);
-            auto it = std::find(sseSockets.begin(), sseSockets.end(), clientSocket);
-            if (it != sseSockets.end()) sseSockets.erase(it);
+            if (it != clientSockets.end()) {
+                clientSockets.erase(it);
+            }
         }
         closesocket(clientSocket);
     }
@@ -361,17 +569,25 @@ private:
 public:
     MjpegServer(int listenPort = 8080) : isRunning(false), serverSocket(INVALID_SOCKET), port(listenPort) {}
 
-    ~MjpegServer() { Stop(); }
+    ~MjpegServer() {
+        Stop();
+    }
 
     bool Start() {
         if (isRunning) return true;
 
         WSADATA wsaData;
-        if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) return false;
+        if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+            return false;
+        }
 
         serverSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-        if (serverSocket == INVALID_SOCKET) { WSACleanup(); return false; }
+        if (serverSocket == INVALID_SOCKET) {
+            WSACleanup();
+            return false;
+        }
 
+        // Allow port reuse
         char opt = 1;
         setsockopt(serverSocket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
@@ -381,10 +597,15 @@ public:
         serverAddr.sin_port = htons(port);
 
         if (bind(serverSocket, (SOCKADDR*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
-            closesocket(serverSocket); WSACleanup(); return false;
+            closesocket(serverSocket);
+            WSACleanup();
+            return false;
         }
+
         if (listen(serverSocket, SOMAXCONN) == SOCKET_ERROR) {
-            closesocket(serverSocket); WSACleanup(); return false;
+            closesocket(serverSocket);
+            WSACleanup();
+            return false;
         }
 
         isRunning = true;
@@ -395,66 +616,61 @@ public:
     void Stop() {
         if (!isRunning) return;
         isRunning = false;
+        
+        // Notify any waiting threads to wake up and exit
         frameCV.notify_all();
 
         if (serverSocket != INVALID_SOCKET) {
             closesocket(serverSocket);
             serverSocket = INVALID_SOCKET;
         }
-        if (serverThread.joinable()) serverThread.join();
 
+        if (serverThread.joinable()) {
+            serverThread.join();
+        }
+
+        // Close all client sockets
         {
             std::lock_guard<std::mutex> lock(clientsMutex);
-            for (SOCKET s : clientSockets) closesocket(s);
+            for (SOCKET sock : clientSockets) {
+                closesocket(sock);
+            }
             clientSockets.clear();
         }
-        {
-            std::lock_guard<std::mutex> lock(sseMutex);
-            for (SOCKET s : sseSockets) closesocket(s);
-            sseSockets.clear();
-        }
+
         WSACleanup();
     }
 
-    // --------------------------------------------------------
-    //  Called by CameraReaderLoop — push new MJPEG frame
-    // --------------------------------------------------------
     void SetLatestFrame(const cv::Mat& frame) {
-        if (!isRunning || clientSockets.empty()) return;
+        if (!isRunning) return;
+        
         {
             std::lock_guard<std::mutex> lock(frameMutex);
             latestFrame = frame.clone();
             newFrameAvailable = true;
         }
         frameCV.notify_all();
-    }
 
-    // --------------------------------------------------------
-    //  Called by timer1_Tick — broadcast JSON to all SSE clients
-    // --------------------------------------------------------
-    void PushLogEvent(const std::string& jsonPayload) {
-        if (!isRunning) return;
-
-        // SSE format: "data: <payload>\n\n"
-        std::string msg = "data: " + jsonPayload + "\n\n";
-
-        std::lock_guard<std::mutex> lock(sseMutex);
-        std::vector<SOCKET> dead;
-        for (SOCKET s : sseSockets) {
-            if (send(s, msg.c_str(), (int)msg.size(), 0) == SOCKET_ERROR) {
-                dead.push_back(s);
-            }
-        }
-        for (SOCKET s : dead) {
-            closesocket(s);
-            sseSockets.erase(std::find(sseSockets.begin(), sseSockets.end(), s));
+        // Debug: print frame counter every 30 frames
+        static int dbgFrameCount = 0;
+        if (++dbgFrameCount % 30 == 0) {
+            printf("[STREAM] Frame #%d pushed to MJPEG server (%d clients)\n",
+                dbgFrameCount, GetClientCount());
+            fflush(stdout);
         }
     }
 
+    void SetStats(const std::string& json) {
+        std::lock_guard<std::mutex> lock(statsMutex);
+        latestStatsJson = json;
+    }
+    
     int GetClientCount() {
         std::lock_guard<std::mutex> lock(clientsMutex);
-        return (int)clientSockets.size();
+        return clientSockets.size();
     }
-
-    int GetPort() const { return port; }
+    
+    int GetPort() const {
+        return port;
+    }
 };

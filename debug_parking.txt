@@ -1,0 +1,254 @@
+[HTTP] Received /api/connect_online for 172.30.88.53:8080/video
+[CONNECT] Received connect request: 172.30.88.53:8080/video
+[INFO] Headless trying to connect: http://172.30.88.53:8080/video
+[OPENCV] Opening network stream with CAP_FFMPEG: http://172.30.88.53:8080/video
+[OPENCV ERROR] Failed to open stream: http://172.30.88.53:8080/video
+[INFO] Headless trying to connect: http://172.30.88.53:8080/videofeed
+[OPENCV] Opening network stream with CAP_FFMPEG: http://172.30.88.53:8080/videofeed
+[OPENCV ERROR] Failed to open stream: http://172.30.88.53:8080/videofeed
+[HTTP] Received /api/connect_online for 172.30.88.53:8080/video
+[CONNECT] Received connect request: 172.30.88.53:8080/video
+[INFO] Headless trying to connect: http://172.30.88.53:8080/video
+[OPENCV] Opening network stream (Auto Backend): http://172.30.88.53:8080/video
+[HTTP] Received /api/connect_online for 172.30.89.122:8080/video
+[CONNECT] Received connect request: 172.30.89.122:8080/video
+[INFO] Headless trying to connect: http://172.30.89.122:8080/video
+[OPENCV] Opening network stream (Auto Backend): http://172.30.89.122:8080/video
+[OPENCV] Stream opened successfully! Backend API used: 1 (FFMPEG)
+[SUCCESS] Headless Connected successfully!
+[CONNECT] StartCameraHeadless returned: SUCCESS
+[HTTP] Received /api/connect_online for 172.30.89.122:8080/video
+[CONNECT] Received connect request: 172.30.89.122:8080/video
+[INFO] Headless trying to connect: http://172.30.89.122:8080/video
+[OPENCV] Opening network stream (Auto Backend): http://172.30.89.122:8080/video
+[OPENCV] Stream opened successfully! Backend API used: 1 (FFMPEG)
+[SUCCESS] Headless Connected successfully!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[CONNECT] StartCameraHeadless returned: SUCCESS
+[HTTP] Received /api/connect_online for 172.30.89.122:8080/video
+[CONNECT] Received connect request: 172.30.89.122:8080/video
+[INFO] Headless trying to connect: http://172.30.89.122:8080/video
+[OPENCV] Opening network stream (Auto Backend): http://172.30.89.122:8080/video
+[OPENCV] Stream opened successfully! Backend API used: 1 (FFMPEG)
+[SUCCESS] Headless Connected successfully!
+[CONNECT] StartCameraHeadless returned: SUCCESS
+[HTTP] Received /api/connect_online for 172.30.89.122:8080/video
+[CONNECT] Received connect request: 172.30.89.122:8080/video
+[INFO] Headless trying to connect: http://172.30.89.122:8080/video
+[OPENCV] Opening network stream (Auto Backend): http://172.30.89.122:8080/video
+[OPENCV] Auto Backend failed. Trying CAP_FFMPEG explicitly...
+[OPENCV ERROR] Failed to open stream: http://172.30.89.122:8080/video
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[INFO] Headless trying to connect: http://172.30.89.122:8080/videofeed
+[OPENCV] Opening network stream (Auto Backend): http://172.30.89.122:8080/videofeed
+[OPENCV] Stream opened successfully! Backend API used: 1 (FFMPEG)
+[SUCCESS] Headless Connected successfully!
+[CONNECT] StartCameraHeadless returned: SUCCESS
+[HTTP] Received /api/connect_online for 172.30.89.122:8080/video
+[CONNECT] Received connect request: 172.30.89.122:8080/video
+[INFO] Headless trying to connect: http://172.30.89.122:8080/video
+[OPENCV] Opening network stream (Auto Backend): http://172.30.89.122:8080/video
+[OPENCV] Stream opened successfully! Backend API used: 1 (FFMPEG)
+[SUCCESS] Headless Connected successfully!
+[CONNECT] StartCameraHeadless returned: SUCCESS
+[HTTP] Received /api/connect_online for 172.30.89.122:8080/video
+[CONNECT] Received connect request: 172.30.89.122:8080/video
+[INFO] Headless trying to connect: http://172.30.89.122:8080/video
+[OPENCV] Opening network stream (Auto Backend): http://172.30.89.122:8080/video
+[OPENCV] Stream opened successfully! Backend API used: 1 (FFMPEG)
+[SUCCESS] Headless Connected successfully!
+[CONNECT] StartCameraHeadless returned: SUCCESS
+[HTTP] Received /api/connect_online for 172.30.89.122:8080/video
+[CONNECT] Received connect request: 172.30.89.122:8080/video
+[INFO] Headless trying to connect: http://172.30.89.122:8080/video
+[OPENCV] Opening network stream (Auto Backend): http://172.30.89.122:8080/video
+[OPENCV] Stream opened successfully! Backend API used: 1 (FFMPEG)
+[SUCCESS] Headless Connected successfully!
+[CONNECT] StartCameraHeadless returned: SUCCESS
+[HTTP] Received /api/connect_online for 172.30.89.122:8080/video
+[CONNECT] Received connect request: 172.30.89.122:8080/video
+[INFO] Headless trying to connect: http://172.30.89.122:8080/video
+[OPENCV] Opening network stream (Auto Backend): http://172.30.89.122:8080/video
+[OPENCV] Stream opened successfully! Backend API used: 1 (FFMPEG)
+[SUCCESS] Headless Connected successfully!
+[CONNECT] StartCameraHeadless returned: SUCCESS
+[HTTP] Received /api/connect_online for 172.30.89.122:8080/video
+[CONNECT] Received connect request: 172.30.89.122:8080/video
+[INFO] Headless trying to connect: http://172.30.89.122:8080/video
+[OPENCV] Opening network stream (Auto Backend): http://172.30.89.122:8080/video
+[OPENCV] Auto Backend failed. Trying CAP_FFMPEG explicitly...
+[OPENCV ERROR] Failed to open stream: http://172.30.89.122:8080/video
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[RAW ERROR] GetRawFrameOnline: g_latestRawFrame is EMPTY!
+[INFO] Headless trying to connect: http://172.30.89.122:8080/videofeed
+[OPENCV] Opening network stream (Auto Backend): http://172.30.89.122:8080/videofeed
+[OPENCV] Auto Backend failed. Trying CAP_FFMPEG explicitly...
+[OPENCV ERROR] Failed to open stream: http://172.30.89.122:8080/videofeed
+[INFO] Headless trying to connect: http://172.30.89.122:8080/video
+[OPENCV] Opening network stream (Auto Backend): http://172.30.89.122:8080/video
+[OPENCV] Auto Backend failed. Trying CAP_FFMPEG explicitly...
+[OPENCV ERROR] Failed to open stream: http://172.30.89.122:8080/video
+[INFO] Headless trying to connect: rtsp://172.30.89.122:8080
+[OPENCV] Opening network stream (Auto Backend): rtsp://172.30.89.122:8080
+[OPENCV] Auto Backend failed. Trying CAP_FFMPEG explicitly...
+[OPENCV ERROR] Failed to open stream: rtsp://172.30.89.122:8080
+[ERROR] Headless could not connect to camera.
+[CONNECT] StartCameraHeadless returned: FAILED
+[HTTP] Received /api/connect_online for 172.30.89.122:8080/video
+[CONNECT] Received connect request: 172.30.89.122:8080/video
+[INFO] Headless trying to connect: http://172.30.89.122:8080/video
+[OPENCV] Opening network stream (Auto Backend): http://172.30.89.122:8080/video
+[OPENCV] Stream opened successfully! Backend API used: 1 (FFMPEG)
+[SUCCESS] Headless Connected successfully!
+[CONNECT] StartCameraHeadless returned: SUCCESS
+[HTTP] Received /api/connect_online for 172.30.89.122:8080/video
+[CONNECT] Received connect request: 172.30.89.122:8080/video
+[INFO] Headless trying to connect: http://172.30.89.122:8080/video
+[OPENCV] Opening network stream (Auto Backend): http://172.30.89.122:8080/video
+[OPENCV] Stream opened successfully! Backend API used: 1 (FFMPEG)
+[SUCCESS] Headless Connected successfully!
+[CONNECT] StartCameraHeadless returned: SUCCESS
+[HTTP] Received /api/connect_online for 172.30.89.122:8080/video
+[CONNECT] Received connect request: 172.30.89.122:8080/video
+[INFO] Headless trying to connect: http://172.30.89.122:8080/video
+[OPENCV] Opening network stream (Auto Backend): http://172.30.89.122:8080/video
+[OPENCV] Stream opened successfully! Backend API used: 1 (FFMPEG)
+[SUCCESS] Headless Connected successfully!
+[CONNECT] StartCameraHeadless returned: SUCCESS
+[HTTP] Received /api/connect_online for 172.30.89.122:8080/video
+[CONNECT] Received connect request: 172.30.89.122:8080/video
+[INFO] Headless trying to connect: http://172.30.89.122:8080/video
+[OPENCV] Opening network stream (Auto Backend): http://172.30.89.122:8080/video
+[OPENCV] Stream opened successfully! Backend API used: 1 (FFMPEG)
+[SUCCESS] Headless Connected successfully!
+[CONNECT] StartCameraHeadless returned: SUCCESS
+[HTTP] Received /api/connect_online for 172.30.89.122:8080/video
+[CONNECT] Received connect request: 172.30.89.122:8080/video
+[INFO] Headless trying to connect: http://172.30.89.122:8080/video
+[OPENCV] Opening network stream (Auto Backend): http://172.30.89.122:8080/video
+[OPENCV] Stream opened successfully! Backend API used: 1 (FFMPEG)
+[SUCCESS] Headless Connected successfully!
+[CONNECT] StartCameraHeadless returned: SUCCESS
+[HTTP] Received /api/connect_online for 172.30.89.122:8080/video
+[CONNECT] Received connect request: 172.30.89.122:8080/video
+[INFO] Headless trying to connect: http://172.30.89.122:8080/video
+[OPENCV] Opening network stream (Auto Backend): http://172.30.89.122:8080/video
+[OPENCV] Stream opened successfully! Backend API used: 1 (FFMPEG)
+[SUCCESS] Headless Connected successfully!
+[CONNECT] StartCameraHeadless returned: SUCCESS
+[HTTP] Received /api/connect_online for 172.30.89.122:8080/video
+[CONNECT] Received connect request: 172.30.89.122:8080/video
+[INFO] Headless trying to connect: http://172.30.89.122:8080/video
+[OPENCV] Opening network stream (Auto Backend): http://172.30.89.122:8080/video
+[OPENCV] Stream opened successfully! Backend API used: 1 (FFMPEG)
+[SUCCESS] Headless Connected successfully!
+[CONNECT] StartCameraHeadless returned: SUCCESS
+[HTTP] Received /api/connect_online for 172.30.89.122:8080/video
+[CONNECT] Received connect request: 172.30.89.122:8080/video
+[INFO] Headless trying to connect: http://172.30.89.122:8080/video
+[OPENCV] Opening network stream (Auto Backend): http://172.30.89.122:8080/video
+[OPENCV] Stream opened successfully! Backend API used: 1 (FFMPEG)
+[SUCCESS] Headless Connected successfully!
+[CONNECT] StartCameraHeadless returned: SUCCESS
+[HTTP] Received /api/connect_online for 172.30.89.122:8080/video
+[CONNECT] Received connect request: 172.30.89.122:8080/video
+[INFO] Headless trying to connect: http://172.30.89.122:8080/video
+[OPENCV] Opening network stream (Auto Backend): http://172.30.89.122:8080/video
+[OPENCV] Stream opened successfully! Backend API used: 1 (FFMPEG)
+[SUCCESS] Headless Connected successfully!
+[CONNECT] StartCameraHeadless returned: SUCCESS
+[HTTP] Received /api/connect_online for 172.30.89.122:8080/video
+[CONNECT] Received connect request: 172.30.89.122:8080/video
+[INFO] Headless trying to connect: http://172.30.89.122:8080/video
+[OPENCV] Opening network stream (Auto Backend): http://172.30.89.122:8080/video
+[OPENCV] Stream opened successfully! Backend API used: 1 (FFMPEG)
+[SUCCESS] Headless Connected successfully!
+[CONNECT] StartCameraHeadless returned: SUCCESS
+[HTTP] Received /api/connect_online for 172.30.89.122:8080/video
+[CONNECT] Received connect request: 172.30.89.122:8080/video
+[INFO] Headless trying to connect: http://172.30.89.122:8080/video
+[OPENCV] Opening network stream (Auto Backend): http://172.30.89.122:8080/video
+[OPENCV] Stream opened successfully! Backend API used: 1 (FFMPEG)
+[SUCCESS] Headless Connected successfully!
+[CONNECT] StartCameraHeadless returned: SUCCESS

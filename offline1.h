@@ -32,9 +32,9 @@
 // ==========================================
 
 // Settings
-static const int YOLO_SIZE = 640;
-static const float CONF_THRESH = 0.25f;
-static const float NMS_THRESH = 0.45f;
+const int YOLO_SIZE = 640;
+const float CONF_THRESH = 0.25f;
+const float NMS_THRESH = 0.45f;
 
 // Shared State Structure
 struct AppState {
@@ -45,36 +45,37 @@ struct AppState {
 	long long frameSequence = -1;
 };
 
-static struct {
+struct FrameInfo {
 	cv::Mat frame;
 	long long sequence;
-}g_latestFrameInfo;
+};
+__declspec(selectany) FrameInfo g_latestFrameInfo;
 
 // *** [NEW] MJPEG SERVER ***
-static MjpegServer* g_mjpegServer_offline = nullptr;
+__declspec(selectany) MjpegServer* g_mjpegServer_offline = nullptr;
 
 // Global Objects
-static AppState g_appState;
-static std::mutex g_stateMutex;
+__declspec(selectany) AppState g_appState;
+__declspec(selectany) std::mutex g_stateMutex;
 
-static cv::dnn::Net* g_net_offline = nullptr;
-static std::vector<std::string> g_classes_offline;
-static std::vector<cv::Scalar> g_colors_offline;
-static BYTETracker* g_tracker_offline = nullptr;
-static ParkingManager* g_pm_logic = nullptr;
-static ParkingManager* g_pm_display = nullptr;
+__declspec(selectany) cv::dnn::Net* g_net_offline = nullptr;
+__declspec(selectany) std::vector<std::string> g_classes_offline;
+__declspec(selectany) std::vector<cv::Scalar> g_colors_offline;
+__declspec(selectany) BYTETracker* g_tracker_offline = nullptr;
+__declspec(selectany) ParkingManager* g_pm_logic = nullptr;
+__declspec(selectany) ParkingManager* g_pm_display = nullptr;
 
 // Video & Sync Resources
-static cv::VideoCapture* g_cap_offline = nullptr;
-static cv::Mat g_latestRawFrame_offline;
-static long long g_frameSeq_offline = 0;
-static std::mutex g_frameMutex_offline;
-static std::mutex g_captureMutex_offline;
-static double g_videoFPS = 30.0;
+__declspec(selectany) cv::VideoCapture* g_cap_offline = nullptr;
+__declspec(selectany) cv::Mat g_latestRawFrame_offline;
+__declspec(selectany) long long g_frameSeq_offline = 0;
+__declspec(selectany) std::mutex g_frameMutex_offline;
+__declspec(selectany) std::mutex g_captureMutex_offline;
+__declspec(selectany) double g_videoFPS = 30.0;
 
-static std::mutex g_aiMutex_offline;
-static bool g_modelReady_offline = false;
-static std::atomic<bool> g_parkingEnabled_offline(false);
+__declspec(selectany) std::mutex g_aiMutex_offline;
+__declspec(selectany) bool g_modelReady_offline = false;
+__declspec(selectany) std::atomic<bool> g_parkingEnabled_offline(false);
 
 // *** [PHASE 3] DRAWING CACHE & BUFFERS ***
 struct CachedLabel {
@@ -87,11 +88,11 @@ struct CachedLabel {
 	// [FIX] Add constructor to prevent garbage values
 	CachedLabel() : baseline(0), isViolating(false), classId(-1) {}
 };
-static std::map<int, CachedLabel> g_labelCache; // Cache for text rendering
-static cv::Mat g_cachedParkingOverlay;
-static std::map<int, SlotStatus> g_lastDrawnStatus;
-static cv::Mat g_drawingBuffer;
-static cv::Mat g_aiInputBuffer; // Reusable buffer for YOLO input
+__declspec(selectany) std::map<int, CachedLabel> g_labelCache; // Cache for text rendering
+__declspec(selectany) cv::Mat g_cachedParkingOverlay;
+__declspec(selectany) std::map<int, SlotStatus> g_lastDrawnStatus;
+__declspec(selectany) cv::Mat g_drawingBuffer;
+__declspec(selectany) cv::Mat g_aiInputBuffer; // Reusable buffer for YOLO input
 
 // *** [PHASE 3] FPS MONITORING ***
 struct PerformanceMonitor {
@@ -112,19 +113,19 @@ struct PerformanceMonitor {
 		lastTick = currentTick;
 	}
 };
-static PerformanceMonitor g_fpsMonitor;
+__declspec(selectany) PerformanceMonitor g_fpsMonitor;
 
 // *** PROCESSED FRAME SHARING ***
-static cv::Mat g_processedFrame_shared;
-static long long g_processedSeq_shared = 0;
-static std::mutex g_processedMutex;
+__declspec(selectany) cv::Mat g_processedFrame_shared;
+__declspec(selectany) long long g_processedSeq_shared = 0;
+__declspec(selectany) std::mutex g_processedMutex;
 
 // *** OPTIMIZATION TIMERS ***
-static std::chrono::steady_clock::time_point g_lastViolationCheck = std::chrono::steady_clock::now();
-static const int VIOLATION_CHECK_INTERVAL_MS = 500;
+__declspec(selectany) std::chrono::steady_clock::time_point g_lastViolationCheck = std::chrono::steady_clock::now();
+const int VIOLATION_CHECK_INTERVAL_MS = 500;
 
-static std::atomic<int> g_droppedFrames(0);
-static std::atomic<int> g_processedFramesCount(0);
+__declspec(selectany) std::atomic<int> g_droppedFrames(0);
+__declspec(selectany) std::atomic<int> g_processedFramesCount(0);
 
 // ==========================================
 //  PART 2: HELPER FUNCTIONS (STATIC)
@@ -1154,6 +1155,24 @@ namespace ConsoleApplication3 {
 
 				String^ txtVio = System::String::Format(L"Violation: {0}", violationCount);
 				if (label7->Text != txtVio) label7->Text = txtVio;
+
+				if (g_mjpegServer_offline) {
+					std::string json = "{\"empty\":" + std::to_string(emptyCount) + 
+					                   ",\"normal\":" + std::to_string(occupiedCount) + 
+					                   ",\"violation\":" + std::to_string(violationCount) + ",\"logs\":[";
+					bool first = true;
+					for each (ViolationRecord^ rec in violationsList) {
+						if (!first) json += ",";
+						System::String^ ts = rec->captureTime.ToString("HH:mm:ss");
+						System::String^ vt = rec->violationType;
+						std::string timeStr = msclr::interop::marshal_as<std::string>(ts);
+						std::string typeStr = msclr::interop::marshal_as<std::string>(vt);
+						json += "{\"id\":" + std::to_string(rec->carId) + ",\"time\":\"" + timeStr + "\",\"type\":\"" + typeStr + "\"}";
+						first = false;
+					}
+					json += "]}";
+					g_mjpegServer_offline->SetStats(json);
+				}
 			}
 		}
 		catch (...) {}
@@ -1274,7 +1293,7 @@ namespace ConsoleApplication3 {
 			this->Text = L"Offline Mode - Ready";
 			// [UI FIX] Only enable template button, upload buttons stay disabled
 			btnLoadParkingTemplate->Enabled = true;
-			MessageBox::Show("Model loaded!\n\n⚠️ Please load a parking template before uploading media.", "Success", MessageBoxButtons::OK, MessageBoxIcon::Information);
+			MessageBox::Show("Model loaded!\n\nNote: Please load a parking template before uploading media.", "Success", MessageBoxButtons::OK, MessageBoxIcon::Information);
 		}
 		else {
 			System::String^ errorMsg = e->Result != nullptr ? safe_cast<System::String^>(e->Result) : L"Unknown error";
@@ -1286,7 +1305,7 @@ namespace ConsoleApplication3 {
 		// [UI FIX] Check if template is loaded
 		if (!g_parkingEnabled_offline.load() || !g_pm_logic || !g_pm_display) {
 			MessageBox::Show(
-				"⚠️ Parking template not loaded!\n\n" +
+				"[!] Parking template not loaded!\n\n" +
 				"Please click 'Load Template' button first before uploading media.\n\n" +
 				"Steps:\n" +
 				"1. Click 'Load Template' button\n" +
@@ -1328,7 +1347,7 @@ namespace ConsoleApplication3 {
 		// [UI FIX] Check if template is loaded
 		if (!g_parkingEnabled_offline.load() || !g_pm_logic || !g_pm_display) {
 			MessageBox::Show(
-				"⚠️ Parking template not loaded!\n\n" +
+				"[!] Parking template not loaded!\n\n" +
 				"Please click 'Load Template' button first before uploading media.\n\n" +
 				"Steps:\n" +
 				"1. Click 'Load Template' button\n" +
@@ -1392,7 +1411,7 @@ namespace ConsoleApplication3 {
 				btnUploadVideo->BackColor = System::Drawing::Color::FromArgb(255, 255, 192);
 				
 				MessageBox::Show(
-					"✅ Template loaded successfully!\n\n" +
+					"[OK] Template loaded successfully!\n\n" +
 					"Parking slot detection is now active.\n" +
 					"Violations will be marked in RED.\n\n" +
 					"You can now upload Image or Video.",

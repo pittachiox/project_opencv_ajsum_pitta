@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Camera View - Smart Parking</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: #121212;
+            color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        .titlebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: #1e1e1e;
+            color: #ffffff;
+            padding: 12px 20px;
+            font-size: 15px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+            z-index: 100;
+        }
+
+        .titlebar a {
+            color: #aaa;
+            text-decoration: none;
+            font-size: 13px;
+            margin-left: auto;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 6px 14px;
+            border-radius: 20px;
+            transition: background 0.2s, color 0.2s;
+        }
+
+        .titlebar a:hover {
+            color: white;
+            background: rgba(255, 255, 255, 0.25);
+        }
+
+        .main {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 28px;
+            padding: 20px;
+            margin-top: 60px;
+        }
+
+        .page-title {
+            font-size: 24px;
+            font-weight: bold;
+            color: #ffffff;
+            text-align: center;
+        }
+
+        .page-sub {
+            font-size: 14px;
+            color: #a0a0a0;
+            margin-top: 6px;
+            text-align: center;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 24px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .big-btn {
+            width: 200px;
+            height: 150px;
+            border: none;
+            border-radius: 12px;
+            font-size: 17px;
+            font-weight: bold;
+            color: white;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+            transition: transform 0.15s, box-shadow 0.15s;
+            text-decoration: none;
+        }
+
+        .big-btn:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.6);
+        }
+
+        .big-btn .icon {
+            font-size: 42px;
+            line-height: 1;
+        }
+
+        .big-btn .label {
+            font-size: 14px;
+            text-align: center;
+        }
+
+        .btn-online {
+            background: linear-gradient(135deg, #27ae60, #1e8449);
+        }
+
+        .btn-offline {
+            background: linear-gradient(135deg, #8e44ad, #6c3483);
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="titlebar">
+        CAM Camera View
+        <a href="/">Home</a>
+    </div>
+
+    <div class="main">
+        <div>
+            <div class="page-title">ดูกล้อง / Camera View</div>
+            <div class="page-sub">เลือกโหมดการดูกล้อง</div>
+        </div>
+
+        <div class="btn-group">
+
+            <!-- Online: IP Camera stream -->
+            <a href="/setup_online" class="big-btn btn-online">
+                <div class="icon">IP</div>
+                <div class="label">Online<br><span style="font-size:11px;font-weight:normal;">IP Camera / Mobile</span>
+                </div>
+            </a>
+
+            <!-- Offline: go straight to dashboard (will show last processed video) -->
+            <a href="/dashboard" class="big-btn btn-offline">
+                <div class="icon">VID</div>
+                <div class="label">Dashboard<br><span style="font-size:11px;font-weight:normal;">View Live Stream</span>
+                </div>
+            </a>
+
+        </div>
+    </div>
+
+</body>
+
+</html>

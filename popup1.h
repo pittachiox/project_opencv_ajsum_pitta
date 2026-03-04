@@ -1,6 +1,21 @@
 ﻿#pragma once
 #include "online1.h"
 #include "offline1.h"
+#include <msclr/marshal_cppstd.h>
+
+#pragma managed(push, off)
+inline bool TriggerOnlineCameraHeadlessWrapper(std::string ip, std::string port, std::string path);
+#pragma managed(pop)
+
+inline bool TriggerOnlineCameraHeadlessWrapper(std::string ip, std::string port, std::string path) {
+	if (ConsoleApplication3::UploadForm::Instance != nullptr) {
+		System::String^ sysIp = msclr::interop::marshal_as<System::String^>(ip);
+		System::String^ sysPort = msclr::interop::marshal_as<System::String^>(port);
+		System::String^ sysPath = msclr::interop::marshal_as<System::String^>(path);
+		return ConsoleApplication3::UploadForm::Instance->StartCameraHeadless(sysIp, sysPort, sysPath);
+	}
+	return false;
+}
 
 namespace ConsoleApplication3 {
 
@@ -17,7 +32,44 @@ namespace ConsoleApplication3 {
 		popup1(void)
 		{
 			InitializeComponent();
+			this->Load += gcnew System::EventHandler(this, &popup1::popup1_Load);
 		}
+
+	private: System::Void popup1_Load(System::Object^ sender, System::EventArgs^ e) {
+		// Hide the GUI completely and run as a service
+		this->Opacity = 0;
+		this->ShowInTaskbar = false;
+		
+		// Wait a tiny bit and then hide properly
+		System::Windows::Forms::Timer^ t = gcnew System::Windows::Forms::Timer();
+		t->Interval = 100;
+		t->Tick += gcnew System::EventHandler(this, &popup1::HideSelf);
+		t->Start();
+
+		// Start the global MjpegServer on port 8080
+		if (!g_globalWebServer) {
+			g_globalWebServer = new MjpegServer(8080);
+			g_globalWebServer->Start();
+		}
+
+		// Initialize UploadForm silently
+		if (UploadForm::Instance == nullptr) {
+			UploadForm^ onlineForm = gcnew UploadForm();
+			onlineForm->Hide();
+		}
+
+		// Connect the web API to the form's headless start method
+		g_globalWebServer->SetConnectOnlineCallback(&TriggerOnlineCameraHeadlessWrapper);
+		
+		// Open the default browser to the web interface
+		System::Diagnostics::Process::Start("http://localhost:8080/");
+	}
+	
+	private: System::Void HideSelf(System::Object^ sender, System::EventArgs^ e) {
+		System::Windows::Forms::Timer^ t = safe_cast<System::Windows::Forms::Timer^>(sender);
+		t->Stop();
+		this->Hide();
+	}
 
 	protected:
 		~popup1()
