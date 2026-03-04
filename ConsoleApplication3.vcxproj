@@ -173,7 +173,7 @@
     </ClCompile>
     <ClCompile Include="main.cpp" />
     <ClCompile Include="popup1.cpp" />
-  </ItemGroup>
+    </ItemGroup>
   <ItemGroup>
     <Image Include="app.ico" />
   </ItemGroup>

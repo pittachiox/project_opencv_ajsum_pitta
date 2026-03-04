@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #define NOMINMAX // [PHASE 1 FIX] Move to top BEFORE any includes
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -14,6 +14,7 @@
 #include "ParkingSlot.h"
 #include "MjpegServer.h"  // [NEW] Added MjpegServer
 #include "ViolationDetailForm.h"
+#include "json.hpp"
 
 #pragma managed(push, off)
 #include <opencv2/opencv.hpp>
@@ -25,6 +26,8 @@
 #include <set>
 #include <chrono> // [PHASE 1] Add for future use
 #include <atomic> // [PHASE 1] Add for atomic operations
+
+using json = nlohmann::json;
 
 // ==========================================
 //  LAYER 1: SHARED DATA
@@ -130,7 +133,48 @@ struct FPSMonitor_Online {
 
 static FPSMonitor_Online g_fpsMonitor_online;
 
+// *** [STREAMING LOG] Mutex-protected stats updated every frame, sent every 500ms ***
+struct LogStats_Online {
+	int empty = 0;
+	int occupied = 0;
+	int violation = 0;
+	cv::Mat lastFrame; // shallow copy of processed frame (for base64 on violation)
+};
+static LogStats_Online g_logStats_online;
+static std::mutex g_logStatsMutex_online;
+static long long g_lastLogSendTick_online = 0;
+
+// *** [STREAMING LOG] Last-sent snapshot — send SSE only when values change ***
+struct LastSentStats_Online {
+	int empty = -1;
+	int occupied = -1;
+	int violation = -1;
+};
+static LastSentStats_Online g_lastSentStats_online;
+
 // --- Helper Functions ---
+
+// *** [VIOLATION LOG] Save cv::Mat as JPEG to C:\logpic, return filename ***
+static std::string SaveViolationImage(const cv::Mat& frame, int carId, const std::string& typeStr) {
+	if (frame.empty()) return "";
+	CreateDirectoryA("C:\\logpic", NULL);
+	SYSTEMTIME st;
+	GetLocalTime(&st);
+
+	// Replace spaces with underscores so URL has no spaces (e.g. "Wrong_Slot")
+	std::string safeType = typeStr;
+	std::replace(safeType.begin(), safeType.end(), ' ', '_');
+
+	char fname[128];
+	sprintf_s(fname, sizeof(fname),
+		"vio_%d_%s_%04d%02d%02d_%02d%02d%02d.jpg",
+		carId, safeType.c_str(),
+		st.wYear, st.wMonth, st.wDay,
+		st.wHour, st.wMinute, st.wSecond);
+	std::string fullPath = std::string("C:\\logpic\\") + fname;
+	cv::imwrite(fullPath, frame);
+	return std::string(fname);
+}
 
 static void ResetParkingCache_Online() {
 	g_cachedParkingOverlay_online = cv::Mat();
@@ -417,7 +461,11 @@ static void ProcessFrameOnline(const cv::Mat& inputFrame, long long frameSeq) {
 	catch (...) {}
 }
 
-// *** DRAWING FUNCTION (UI Thread) - เหมือนออฟไลน์ ***
+// EMA bounding box smoothing — alpha=0.35: lower=smoother, higher=more responsive
+static std::map<int, cv::Rect> g_emaBoxes_online;
+static std::map<int, int>      g_emaMissCount_online; // consecutive frames not detected
+static const float             EMA_ALPHA = 0.35f;
+static const int               EMA_MISS_THRESHOLD = 30; // delete after N missed frames
 
 static void DrawSceneOnline(const cv::Mat& frame, long long displaySeq, cv::Mat& outResult) {
 	if (frame.empty()) return;
@@ -475,6 +523,19 @@ static void DrawSceneOnline(const cv::Mat& frame, long long displaySeq, cv::Mat&
 				currentFrameCarIds.insert(obj.id);
 				
 				cv::Rect box = obj.bbox;
+
+				// *** EMA smoothing: position only (x,y) — size stays raw ***
+				auto& ema = g_emaBoxes_online[obj.id];
+				if (ema.area() == 0) {
+					ema = box; // first detection — seed with raw
+				} else {
+					ema.x = (int)(EMA_ALPHA * box.x + (1-EMA_ALPHA) * ema.x);
+					ema.y = (int)(EMA_ALPHA * box.y + (1-EMA_ALPHA) * ema.y);
+					ema.width  = box.width;  // always use latest size
+					ema.height = box.height; // always use latest size
+				}
+				box = ema; // use smoothed position for drawing
+
 				bool isViolating = (state.violatingCarIds.count(obj.id) > 0);
 
 				if (isViolating) {
@@ -542,12 +603,472 @@ static void DrawSceneOnline(const cv::Mat& frame, long long displaySeq, cv::Mat&
 					++it;
 				}
 			}
+			// EMA GC: increment miss counter for disappeared cars, erase after threshold
+			for (auto it = g_emaMissCount_online.begin(); it != g_emaMissCount_online.end();) {
+				if (!currentFrameCarIds.count(it->first)) {
+					it->second++;
+					if (it->second > EMA_MISS_THRESHOLD) {
+						g_emaBoxes_online.erase(it->first);
+						it = g_emaMissCount_online.erase(it);
+						continue;
+					}
+				} else {
+					it->second = 0; // reset counter — car is visible
+				}
+				++it;
+			}
+			// Register new cars in miss counter
+			for (int id : currentFrameCarIds) {
+				if (!g_emaMissCount_online.count(id))
+					g_emaMissCount_online[id] = 0;
+			}
 		}
 	}
 
 	// [PHASE 3] Draw Stats (Obj count + FPS)
 	std::string stats = "Obj: " + std::to_string(state.cars.size()) + " | FPS: " + std::to_string((int)g_fpsMonitor_online.avgFPS);
 	cv::putText(outResult, stats, cv::Point(10, 25), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0, 255, 0), 2);
+
+	// *** CCTV Timestamp Overlay ***
+	{
+		SYSTEMTIME st;
+		GetLocalTime(&st);
+		char timeBuf[64];
+		sprintf_s(timeBuf, sizeof(timeBuf), "%04d-%02d-%02d  %02d:%02d:%02d",
+			st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+		std::string timeStr(timeBuf);
+		int fontFace = cv::FONT_HERSHEY_SIMPLEX;
+		double fontScale = 0.7;
+		int thickness = 2;
+		int baseline = 0;
+		cv::Size textSize = cv::getTextSize(timeStr, fontFace, fontScale, thickness, &baseline);
+		// Bottom-right corner with padding
+		int x = outResult.cols - textSize.width - 15;
+		int y = outResult.rows - 15;
+		// Dark background for readability
+		cv::rectangle(outResult, cv::Point(x - 5, y - textSize.height - 5),
+			cv::Point(x + textSize.width + 5, y + baseline + 5), cv::Scalar(0, 0, 0), -1);
+		cv::putText(outResult, timeStr, cv::Point(x, y), fontFace, fontScale, cv::Scalar(255, 255, 255), thickness);
+	}
+}
+
+// ==========================================
+//  STEP 2: BASE64 ENCODING FUNCTIONS
+// ==========================================
+
+static std::string Base64Encode(const unsigned char* buffer, size_t length) {
+	static const char base64_table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+	std::string result;
+	result.reserve((length + 2) / 3 * 4);
+	
+	for (size_t i = 0; i < length; i += 3) {
+		unsigned int b1 = buffer[i];
+		unsigned int b2 = (i + 1 < length) ? buffer[i + 1] : 0;
+		unsigned int b3 = (i + 2 < length) ? buffer[i + 2] : 0;
+		
+		unsigned int triplet = (b1 << 16) | (b2 << 8) | b3;
+		
+		result += base64_table[(triplet >> 18) & 0x3F];
+		result += base64_table[(triplet >> 12) & 0x3F];
+		result += (i + 1 < length) ? base64_table[(triplet >> 6) & 0x3F] : '=';
+		result += (i + 2 < length) ? base64_table[triplet & 0x3F] : '=';
+	}
+	
+	return result;
+}
+
+static std::string MatToBase64Jpeg(const cv::Mat& frame) {
+	// Check if frame is empty
+	if (frame.empty()) {
+		return std::string();
+	}
+	
+	// Encode frame to JPEG with quality 85
+	std::vector<uchar> buffer;
+	std::vector<int> params = { cv::IMWRITE_JPEG_QUALITY, 85 };
+	bool success = cv::imencode(".jpg", frame, buffer, params);
+	
+	if (!success || buffer.empty()) {
+		OutputDebugStringA("[ERROR] Failed to encode frame to JPEG\n");
+		return std::string();
+	}
+	
+	// Debug output
+	OutputDebugStringA(("[IMG] Encoded JPEG: " + std::to_string(buffer.size()) + " bytes\n").c_str());
+	
+	// Convert JPEG buffer to Base64
+	std::string base64String = Base64Encode(buffer.data(), buffer.size());
+	
+	return base64String;
+}
+
+// ==========================================
+//  STEP 3: ASYNC HTTP POST FUNCTIONS
+// ==========================================
+
+static void SendHttpPostAsync(const std::string& jsonPayload, 
+                              const std::string& serverIP = "127.0.0.1", 
+                              int port = 9000) {
+	// Fire-and-forget: detach thread to send HTTP POST asynchronously
+	std::thread([jsonPayload, serverIP, port]() {
+		try {
+			// Initialize WinSock2
+			WSADATA wsaData;
+			int wsaResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
+			if (wsaResult != 0) {
+				OutputDebugStringA(("[HTTP] ❌ WSAStartup failed with error: " + std::to_string(wsaResult) + "\n").c_str());
+				return;
+			}
+
+			// Create socket
+			SOCKET sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+			if (sock == INVALID_SOCKET) {
+				int err = WSAGetLastError();
+				OutputDebugStringA(("[HTTP] ❌ socket() failed with error: " + std::to_string(err) + "\n").c_str());
+				WSACleanup();
+				return;
+			}
+
+			// Set socket timeout to 5 seconds
+			DWORD timeout = 5000;
+			setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof(timeout));
+			setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, (const char*)&timeout, sizeof(timeout));
+
+			// Prepare server address
+			sockaddr_in serverAddr;
+			serverAddr.sin_family = AF_INET;
+			serverAddr.sin_port = htons(port);
+			serverAddr.sin_addr.s_addr = inet_addr(serverIP.c_str());
+
+			// Log connection attempt
+			OutputDebugStringA(("[HTTP] Sending to " + serverIP + ":" + std::to_string(port) + "\n").c_str());
+			OutputDebugStringA(("[HTTP] Payload size: " + std::to_string(jsonPayload.size()) + " bytes\n").c_str());
+
+			// Connect to server
+			if (connect(sock, (sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
+				int err = WSAGetLastError();
+				OutputDebugStringA(("[HTTP] ❌ connect() failed with error: " + std::to_string(err) + "\n").c_str());
+				closesocket(sock);
+				WSACleanup();
+				return;
+			}
+
+			// Build HTTP POST request
+			std::string httpRequest = "POST /api/violations HTTP/1.1\r\n";
+			httpRequest += "Host: " + serverIP + ":" + std::to_string(port) + "\r\n";
+			httpRequest += "Content-Type: application/json\r\n";
+			httpRequest += "Content-Length: " + std::to_string(jsonPayload.size()) + "\r\n";
+			httpRequest += "Connection: close\r\n";
+			httpRequest += "\r\n";
+			httpRequest += jsonPayload;
+
+			// Send HTTP request
+			int sendResult = send(sock, httpRequest.c_str(), (int)httpRequest.size(), 0);
+			if (sendResult == SOCKET_ERROR) {
+				int err = WSAGetLastError();
+				OutputDebugStringA(("[HTTP] ❌ send() failed with error: " + std::to_string(err) + "\n").c_str());
+				closesocket(sock);
+				WSACleanup();
+				return;
+			}
+
+			// Receive response
+			char recvbuf[512] = {0};
+			int recvResult = recv(sock, recvbuf, sizeof(recvbuf) - 1, 0);
+			
+			if (recvResult > 0) {
+				recvbuf[recvResult] = '\0';
+				std::string response(recvbuf);
+				
+				// Check for 200 OK response
+				if (response.find("200 OK") != std::string::npos) {
+					OutputDebugStringA("[HTTP] ✅ Success - 200 OK\n");
+				} else {
+					OutputDebugStringA(("[HTTP] ⚠️  Received response: " + response.substr(0, 100) + "\n").c_str());
+				}
+			} else if (recvResult == 0) {
+				OutputDebugStringA("[HTTP] ⚠️  Connection closed by server\n");
+			} else {
+				int err = WSAGetLastError();
+				if (err == WSAETIMEDOUT) {
+					OutputDebugStringA("[HTTP] ⏱️ Timeout after 5s\n");
+				} else {
+					OutputDebugStringA(("[HTTP] ❌ recv() failed with error: " + std::to_string(err) + "\n").c_str());
+				}
+			}
+
+			// Close socket
+			closesocket(sock);
+			WSACleanup();
+		}
+		catch (const std::exception& ex) {
+			OutputDebugStringA(("[HTTP] ❌ Exception: " + std::string(ex.what()) + "\n").c_str());
+		}
+		catch (...) {
+			OutputDebugStringA("[HTTP] ❌ Unknown exception occurred\n");
+		}
+	}).detach(); // Fire-and-forget: detach thread
+}
+
+// ==========================================
+//  STEP 4: TIMESTAMP & STATUS UPDATE
+// ==========================================
+
+static std::string GetISO8601Timestamp() {
+	SYSTEMTIME st;
+	GetSystemTime(&st);
+	
+	char buffer[32];
+	sprintf_s(buffer, sizeof(buffer), "%04d-%02d-%02dT%02d:%02d:%02d.%03dZ",
+			  st.wYear, st.wMonth, st.wDay,
+			  st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
+	
+	return std::string(buffer);
+}
+
+static void SendAggregateStatusUpdate(int emptyCount, 
+                                      int occupiedCount, 
+                                      int violationCount,
+                                      const cv::Mat& frame,
+                                      const std::string& cameraId = "cam_01",
+                                      const std::string& serverIP = "127.0.0.1",
+                                      int port = 9000) {
+	try {
+		// Log the status update
+		OutputDebugStringA(("[STATS] Sending: " + std::to_string(violationCount) + 
+						  " violations, " + std::to_string(occupiedCount) + 
+						  " occupied, " + std::to_string(emptyCount) + " empty\n").c_str());
+
+		// Get current timestamp in ISO8601 format
+		std::string timestamp = GetISO8601Timestamp();
+
+		// Convert frame to base64 JPEG
+		std::string base64Image = MatToBase64Jpeg(frame);
+
+		// Build JSON payload
+		json payload;
+		payload["camera_id"] = cameraId;
+		payload["timestamp"] = timestamp;
+		payload["total_slots"] = emptyCount + occupiedCount;
+		payload["available_slots"] = emptyCount;
+		payload["occupied_slots"] = occupiedCount;
+		payload["violation_slots"] = violationCount;
+		
+		// Only include image if we have a valid base64 string
+		if (!base64Image.empty()) {
+			payload["latest_violation_image_base64"] = base64Image;
+		}
+
+		// Convert JSON to string
+		std::string jsonStr = payload.dump();
+		
+		OutputDebugStringA(("[STATS] JSON payload size: " + std::to_string(jsonStr.size()) + " bytes\n").c_str());
+
+		// Send HTTP POST request asynchronously
+		SendHttpPostAsync(jsonStr, serverIP, port);
+	}
+	catch (const std::exception& ex) {
+		OutputDebugStringA(("[STATS] ❌ Exception: " + std::string(ex.what()) + "\n").c_str());
+	}
+	catch (...) {
+		OutputDebugStringA("[STATS] ❌ Unknown exception occurred\n");
+	}
+}
+
+// ============================================================
+//  [UNMANAGED] VIDEO RECORDING — 20s MP4 clips
+//  C:\locvideo\YYYYMMDD\HHMMSS.mp4
+// ============================================================
+
+static cv::VideoWriter* g_videoWriter_online      = nullptr;
+static std::mutex        g_videoWriterMutex_online;
+static std::string       g_currentVideoRelPath     = ""; // current clip being written
+static std::string       g_lastCompletedRelPath    = ""; // last fully-finished clip (ready to serve)
+static long long         g_videoClipStartTick      = 0;
+static int               g_videoFramesWritten      = 0;  // frames written since clip start
+static double            g_lastClipActualFps       = 0;  // measured fps of last completed clip
+static const int         VIDEO_CLIP_SECONDS        = 60; // 1 minute per clip
+
+// *** Async Video Write Queue ***
+#include <queue>
+#include <condition_variable>
+static std::queue<cv::Mat>     g_videoWriteQueue;
+static std::mutex              g_videoQueueMutex;
+static std::condition_variable g_videoQueueCV;
+static std::atomic<bool>       g_videoQueueRunning(false);
+static std::thread*            g_videoWriteThread = nullptr;
+static const int               VIDEO_QUEUE_MAX = 30; // drop frames if queue too deep
+
+static void VideoWriteThreadFunc() {
+	while (g_videoQueueRunning.load()) {
+		cv::Mat frame;
+		{
+			std::unique_lock<std::mutex> ul(g_videoQueueMutex);
+			g_videoQueueCV.wait_for(ul, std::chrono::milliseconds(100),
+				[]{ return !g_videoWriteQueue.empty() || !g_videoQueueRunning.load(); });
+			if (g_videoWriteQueue.empty()) continue;
+			frame = g_videoWriteQueue.front();
+			g_videoWriteQueue.pop();
+		}
+		if (!frame.empty()) {
+			std::lock_guard<std::mutex> vl(g_videoWriterMutex_online);
+			if (g_videoWriter_online && g_videoWriter_online->isOpened()) {
+				g_videoWriter_online->write(frame);
+				g_videoFramesWritten++;
+			}
+		}
+	}
+}
+
+static void StartVideoWriteThread() {
+	if (g_videoWriteThread) return;
+	g_videoQueueRunning.store(true);
+	g_videoWriteThread = new std::thread(VideoWriteThreadFunc);
+}
+
+static void StopVideoWriteThread() {
+	g_videoQueueRunning.store(false);
+	g_videoQueueCV.notify_all();
+	if (g_videoWriteThread && g_videoWriteThread->joinable())
+		g_videoWriteThread->join();
+	delete g_videoWriteThread;
+	g_videoWriteThread = nullptr;
+}
+
+static void EnqueueVideoFrame(const cv::Mat& frame) {
+	std::lock_guard<std::mutex> ql(g_videoQueueMutex);
+	if ((int)g_videoWriteQueue.size() < VIDEO_QUEUE_MAX)
+		g_videoWriteQueue.push(frame.clone());
+	// else: drop frame silently (queue full)
+	g_videoQueueCV.notify_one();
+}
+
+static void StartNewVideoClip(int width, int height, double fps) {
+	if (width <= 0 || height <= 0) return;
+	SYSTEMTIME st;
+	GetLocalTime(&st);
+
+	// Date folder: C:\locvideo\YYYYMMDD
+	char dateFolder[64];
+	sprintf_s(dateFolder, sizeof(dateFolder),
+		"C:\\locvideo\\%04d%02d%02d", st.wYear, st.wMonth, st.wDay);
+	CreateDirectoryA("C:\\locvideo", NULL);
+	CreateDirectoryA(dateFolder, NULL);
+
+	// Filename: HHMMSS.webm (start time of clip)
+	char relPath[64];
+	sprintf_s(relPath, sizeof(relPath),
+		"%04d%02d%02d/%02d%02d%02d.webm",
+		st.wYear, st.wMonth, st.wDay,
+		st.wHour, st.wMinute, st.wSecond);
+
+	std::string fullPath = std::string("C:\\locvideo\\") + relPath;
+	// Fix backslashes in relPath for file system
+	std::replace(fullPath.begin(), fullPath.end(), '/', '\\');
+
+	std::lock_guard<std::mutex> lock(g_videoWriterMutex_online);
+	if (g_videoWriter_online) {
+		// Measure actual fps of the clip we're closing
+		double elapsed = (cv::getTickCount() - g_videoClipStartTick) / cv::getTickFrequency();
+		if (elapsed > 1.0 && g_videoFramesWritten > 0)
+			g_lastClipActualFps = g_videoFramesWritten / elapsed;
+		// Save completed clip path
+		if (!g_currentVideoRelPath.empty())
+			g_lastCompletedRelPath = g_currentVideoRelPath;
+		g_videoWriter_online->release();
+		delete g_videoWriter_online;
+		g_videoWriter_online = nullptr;
+	}
+
+	// Use measured fps if available; fall back to 6fps for first clip
+	double useFps = (g_lastClipActualFps > 1.0) ? g_lastClipActualFps : 6.0;
+
+	cv::VideoWriter* writer2 = new cv::VideoWriter(
+		fullPath,
+		cv::VideoWriter::fourcc('V','P','8','0'),
+		useFps,
+		cv::Size(width, height));
+
+	if (writer2->isOpened()) {
+		g_videoWriter_online  = writer2;
+		g_currentVideoRelPath = std::string(relPath);
+		g_videoClipStartTick  = cv::getTickCount();
+		g_videoFramesWritten  = 0; // reset counter for new clip
+		OutputDebugStringA(("[VIDEO] New clip (" + std::to_string((int)useFps) + "fps): " + fullPath + "\n").c_str());
+	} else {
+		delete writer2;
+		OutputDebugStringA("[VIDEO] Failed to open VideoWriter!\n");
+	}
+}
+
+static void StopVideoRecording() {
+	std::lock_guard<std::mutex> lock(g_videoWriterMutex_online);
+	if (g_videoWriter_online) {
+		g_videoWriter_online->release();
+		delete g_videoWriter_online;
+		g_videoWriter_online = nullptr;
+	}
+	g_currentVideoRelPath = "";
+}
+
+// Close current clip (finalizes MP4 moov atom) and return its URL.
+// Starts fresh — next frame will lazily open a new clip.
+static std::string FinalizeAndGetVideoClip(const std::string& serverIp) {
+	std::lock_guard<std::mutex> lock(g_videoWriterMutex_online);
+	if (!g_videoWriter_online || g_currentVideoRelPath.empty()) return "";
+
+	// Release finalizes the MP4 (writes moov atom)
+	g_videoWriter_online->release();
+	delete g_videoWriter_online;
+	g_videoWriter_online = nullptr;
+
+	std::string relPath = g_currentVideoRelPath;
+	g_currentVideoRelPath = ""; // next frame will start a new clip
+	OutputDebugStringA(("[VIDEO] Finalized clip: " + relPath + "\n").c_str());
+	return "http://" + serverIp + ":8080/locvideo/" + relPath;
+}
+
+// ============================================================
+//  [UNMANAGED] SSE Push Helpers — JSON must be built here,
+//  NOT inside a managed ref class (nlohmann JSON incompatible)
+// ============================================================
+
+static void PushStatsSSEHelper(int emptyCount, int occupiedCount, int violationCount) {
+	if (!g_mjpegServer_online) return;
+	try {
+		json p;
+		p["event"]           = "stats";
+		p["camera_id"]       = "cam_01";
+		p["timestamp"]       = GetISO8601Timestamp();
+		p["total_slots"]     = emptyCount + occupiedCount;
+		p["available_slots"] = emptyCount;
+		p["occupied_slots"]  = occupiedCount;
+		p["violation_slots"] = violationCount;
+		g_mjpegServer_online->PushLogEvent(p.dump());
+	} catch (...) {}
+}
+
+static void PushViolationSSEHelper(int carId, const std::string& typeStr,
+                                   const std::string& timeStr,
+                                   int clipOffsetSec, int parkingDurationSec,
+                                   const std::string& imgUrl, const std::string& savedPath,
+                                   const std::string& videoUrl) {
+	if (!g_mjpegServer_online) return;
+	try {
+		json p;
+		p["event"]                = "violation";
+		p["car_id"]               = carId;
+		p["type"]                 = typeStr;
+		p["time"]                 = timeStr;
+		p["clip_offset_sec"]      = clipOffsetSec;      // seek to this second in video
+		p["parking_duration_sec"] = parkingDurationSec; // how long car has been parked
+		p["img_url"]              = imgUrl;
+		p["saved_path"]           = savedPath;
+		p["video_url"]            = videoUrl.empty() ? "" : videoUrl;
+		g_mjpegServer_online->PushLogEvent(p.dump());
+		OutputDebugStringA(("[VIO] SSE sent car_id=" + std::to_string(carId) + "\n").c_str());
+	} catch (...) {}
 }
 
 #pragma managed(pop)
@@ -688,6 +1209,7 @@ private: System::Windows::Forms::Label^ label1;
 			   this->splitContainer1 = (gcnew System::Windows::Forms::SplitContainer());
 			   this->label1 = (gcnew System::Windows::Forms::Label());
 			   
+
 			   // Background additions
 			   this->btnRunInBackground = (gcnew System::Windows::Forms::Button());
 			   this->notifyIcon = (gcnew System::Windows::Forms::NotifyIcon(this->components));
@@ -1098,6 +1620,10 @@ private: System::Windows::Forms::Label^ label1;
 	private: System::Void timer1_Tick(System::Object^ sender, System::EventArgs^ e) {
 		if (isBackgroundMode) return; // [NEW] Skip updating UI if in background
 
+		// *** [STREAMING LOG] Timer counters ***
+		static int sendCounter = 0;
+		static int tickCounter = 0;
+
 		try {
 			cv::Mat finalFrame;
 			long long seq = 0;
@@ -1120,7 +1646,7 @@ private: System::Windows::Forms::Label^ label1;
 			System::String^ dateTimeStr = now.ToString(L"dd/MM/yy");
 			lblLogs->Text = dateTimeStr;
 
-			// *** [NEW] UPDATE PARKING STATISTICS LABELS ***
+			// *** UPDATE PARKING STATISTICS LABELS ***
 			OnlineAppState state;
 			{
 				std::lock_guard<std::mutex> lock(g_onlineStateMutex);
@@ -1134,19 +1660,76 @@ private: System::Windows::Forms::Label^ label1;
 
 				for (const auto& slotEntry : state.slotStatuses) {
 					SlotStatus status = slotEntry.second;
-					if (status == SlotStatus::EMPTY) {
-						emptyCount++;
-					}
-					else {
-						occupiedCount++;
-					}
+					if (status == SlotStatus::EMPTY) emptyCount++;
+					else occupiedCount++;
 				}
 
-				int violationCount = state.violatingCarIds.size();
+				int violationCount = (int)state.violatingCarIds.size();
 
 				label5_online->Text = System::String::Format(L"Empty: {0}", emptyCount);
 				label6_online->Text = System::String::Format(L"Normal: {0}", occupiedCount);
 				label7_online->Text = System::String::Format(L"Violation: {0}", violationCount);
+
+				// *** [STREAMING LOG] SEND HTTP POST EVERY 500ms using mutex-protected globals ***
+				long long nowTick = cv::getTickCount();
+				double elapsedMs = (nowTick - g_lastLogSendTick_online) /
+					               cv::getTickFrequency() * 1000.0;
+
+				if (elapsedMs >= 500.0) {
+					g_lastLogSendTick_online = nowTick;
+					sendCounter++;
+
+					// Read latest stats + frame from globals under lock
+					int snapEmpty, snapOccupied, snapViolation;
+					cv::Mat snapFrame;
+					{
+						std::lock_guard<std::mutex> lock(g_logStatsMutex_online);
+						snapEmpty     = g_logStats_online.empty;
+						snapOccupied  = g_logStats_online.occupied;
+						snapViolation = g_logStats_online.violation;
+						// Only clone frame when there is a violation (CPU optimization)
+						if (snapViolation > 0 && !g_logStats_online.lastFrame.empty()) {
+							snapFrame = g_logStats_online.lastFrame.clone();
+						}
+					}
+
+					// Async HTTP POST - snapFrame is empty when no violations (no base64)
+					SendAggregateStatusUpdate(snapEmpty, snapOccupied,
+											  snapViolation,
+											  snapFrame,   // empty Mat → no base64 encoded
+											  "cam_01",
+											  "127.0.0.1",
+											  9000);
+
+					// *** [SSE] Push JSON log to all browser clients — ONLY if values changed ***
+					if (g_mjpegServer_online) {
+						bool changed = (snapEmpty    != g_lastSentStats_online.empty ||
+										snapOccupied != g_lastSentStats_online.occupied ||
+										snapViolation!= g_lastSentStats_online.violation);
+						if (changed) {
+							g_lastSentStats_online.empty    = snapEmpty;
+							g_lastSentStats_online.occupied = snapOccupied;
+							g_lastSentStats_online.violation= snapViolation;
+
+							// Call unmanaged helper to build+push JSON (nlohmann JSON not allowed in managed class)
+							PushStatsSSEHelper(snapEmpty, snapOccupied, snapViolation);
+						}
+					}
+
+					OutputDebugStringA(("[STREAM] POST #" + std::to_string(sendCounter) +
+									    " | E:" + std::to_string(snapEmpty) +
+									    " O:" + std::to_string(snapOccupied) +
+									    " V:" + std::to_string(snapViolation) +
+									    (snapViolation > 0 ? " [+img]" : "") +
+									    "\n").c_str());
+				}
+			}
+
+			// *** DEBUG LOGGING - Every ~1 second ***
+			tickCounter++;
+			if (tickCounter % 30 == 0) {
+				OutputDebugStringA(("[TIMER] FPS: " +
+									std::to_string((int)g_fpsMonitor_online.avgFPS) + "\n").c_str());
 			}
 		}
 		catch (...) {}
@@ -1156,6 +1739,9 @@ private: System::Windows::Forms::Label^ label1;
 		isProcessing = false;
 		timer1->Stop();
 		if (processingWorker->IsBusy) processingWorker->CancelAsync();
+
+		// Stop video recording
+		StopVideoRecording();
 
 		// *** [NEW] Stop MJPEG Server ***
 		if (g_mjpegServer_online) {
@@ -1252,7 +1838,7 @@ private: System::Windows::Forms::Label^ label1;
 			g_mjpegServer_online = new MjpegServer(8080);
 			if (g_mjpegServer_online->Start()) {
 				std::string ip = GetLocalIP();
-				lblNetworkStream->Text = gcnew String(("Stream: http://" + ip + ":8080").c_str());
+				lblNetworkStream->Text = gcnew String(("Open: http://" + ip + ":8080  |  Stream: /stream  |  Logs: /events").c_str());
 			} else {
 				lblNetworkStream->Text = "Stream: Failed to start";
 				delete g_mjpegServer_online;
@@ -1318,6 +1904,46 @@ private: System::Windows::Forms::Label^ label1;
 						if (g_mjpegServer_online) {
 							g_mjpegServer_online->SetLatestFrame(g_processedFrame_online);
 						}
+
+						// *** [STREAMING LOG] Write latest stats to globals under mutex (every frame, no HTTP) ***
+						{
+							OnlineAppState snapState;
+							{
+								std::lock_guard<std::mutex> sLock(g_onlineStateMutex);
+								snapState = g_onlineState;
+							}
+							int em = 0, oc = 0;
+							for (const auto& s : snapState.slotStatuses) {
+								if (s.second == SlotStatus::EMPTY) em++; else oc++;
+							}
+							int vi = (int)snapState.violatingCarIds.size();
+
+							std::lock_guard<std::mutex> lg(g_logStatsMutex_online);
+							g_logStats_online.empty     = em;
+							g_logStats_online.occupied  = oc;
+							g_logStats_online.violation = vi;
+							// Store latest frame (shallow copy, cheap)
+							g_logStats_online.lastFrame = g_processedFrame_online;
+						}
+
+						// *** [VIDEO] Write frame to current clip ***
+					{
+						bool needNewClip = false;
+						{
+							std::lock_guard<std::mutex> vl(g_videoWriterMutex_online);
+							double elapsed = (cv::getTickCount() - g_videoClipStartTick) / cv::getTickFrequency();
+							needNewClip = (!g_videoWriter_online || !g_videoWriter_online->isOpened() || elapsed >= VIDEO_CLIP_SECONDS);
+						}
+						if (needNewClip) {
+							double fps = g_cameraFPS > 0 ? g_cameraFPS : 30.0;
+							StartNewVideoClip(renderedFrame.cols, renderedFrame.rows, fps);
+						}
+						std::lock_guard<std::mutex> vl2(g_videoWriterMutex_online);
+						if (g_videoWriter_online && g_videoWriter_online->isOpened()) {
+							g_videoWriter_online->write(renderedFrame);
+							g_videoFramesWritten++;
+						}
+					}
 					}
 				}
 
@@ -1440,9 +2066,9 @@ btnCancel->Text = L"Cancel";
 btnCancel->Location = System::Drawing::Point(230, 215);
 btnCancel->Size = System::Drawing::Size(100, 35);
 btnCancel->BackColor = System::Drawing::Color::FromArgb(220, 53, 69);
-btnCancel->ForeColor = System::Drawing::Color::White;
-btnCancel->FlatStyle = FlatStyle::Flat;
-btnCancel->DialogResult = System::Windows::Forms::DialogResult::Cancel;
+	btnCancel->ForeColor = System::Drawing::Color::White;
+	btnCancel->FlatStyle = FlatStyle::Flat;
+	btnCancel->DialogResult = System::Windows::Forms::DialogResult::Cancel;
 
 	ipForm->Controls->Add(labelTitle);
 	ipForm->Controls->Add(labelIP);
@@ -1630,7 +2256,8 @@ private: System::Void UploadForm_FormClosing(System::Object^ sender, FormClosing
 
 	// *** [NEW] VIOLATION ALERTS METHODS ***
 	private: void AddViolationRecord_Online(int carId, cv::Mat& frameCapture, System::String^ violationType, 
-									 cv::Mat fullFrame, cv::Rect carBox) {
+									 cv::Mat fullFrame, cv::Rect carBox,
+									 int parkingDurationSec, int clipOffsetSec) {
 		if (frameCapture.empty()) return;
 
 		Bitmap^ screenshot = gcnew Bitmap(frameCapture.cols, frameCapture.rows, System::Drawing::Imaging::PixelFormat::Format24bppRgb);
@@ -1661,10 +2288,34 @@ private: System::Void UploadForm_FormClosing(System::Object^ sender, FormClosing
 		record->visualizationBitmap = visualizationBitmap;
 		record->violationType = violationType;
 		record->captureTime = System::DateTime::Now;
-		record->durationSeconds = 0;
+		record->durationSeconds = parkingDurationSec;
 
 		violationsList_online->Add(record);
 		RefreshViolationPanel_Online();
+
+		// *** [VIOLATION LOG] Save image + push SSE event ***
+		std::string typeStr = msclr::interop::marshal_as<std::string>(violationType);
+		cv::Mat frameToSave = visualizationMat.empty() ? fullFrame : visualizationMat;
+		std::string savedFile = SaveViolationImage(frameToSave, carId, typeStr);
+
+		if (!savedFile.empty() && g_mjpegServer_online) {
+			std::string serverIp = GetLocalIP();
+			std::string imgUrl   = "http://" + serverIp + ":8080/violations/" + savedFile;
+			std::string timeStr  = msclr::interop::marshal_as<std::string>(record->captureTime.ToString("HH:mm:ss"));
+			std::string savedPath = "C:\\logpic\\" + savedFile;
+
+			// video_url = CURRENT clip (contains this violation at clip_offset_sec)
+			// Link becomes playable when clip rotates after 60 seconds
+			std::string videoUrl = "";
+			{
+				std::lock_guard<std::mutex> vlock(g_videoWriterMutex_online);
+				if (!g_currentVideoRelPath.empty())
+					videoUrl = "http://" + serverIp + ":8080/locvideo/" + g_currentVideoRelPath;
+			}
+
+			PushViolationSSEHelper(carId, typeStr, timeStr,
+				clipOffsetSec, parkingDurationSec, imgUrl, savedPath, videoUrl);
+		}
 	}
 
 	private: void RefreshViolationPanel_Online() {
@@ -1756,9 +2407,13 @@ private: void CheckViolations_Online(cv::Mat& currentFrame) {
 					violatingCarTimers_online->Add(car.id, System::DateTime::Now);
 					
 					cv::Rect safeBbox = car.bbox & cv::Rect(0, 0, currentFrame.cols, currentFrame.rows);
-					if (safeBbox.area() > 0) {
-						cv::Mat croppedFrame = currentFrame(safeBbox).clone(); // [FIX] Clone only when capturing
-						AddViolationRecord_Online(car.id, croppedFrame, L"Overstay", currentFrame, car.bbox);
+				if (safeBbox.area() > 0) {
+						cv::Mat croppedFrame = currentFrame(safeBbox).clone();
+						int parkingSec = (int)(car.framesStill / (g_cameraFPS > 0 ? g_cameraFPS : 30.0));
+						int clipOffset = (g_videoClipStartTick > 0)
+							? (int)((cv::getTickCount() - g_videoClipStartTick) / cv::getTickFrequency())
+							: 0;
+						AddViolationRecord_Online(car.id, croppedFrame, L"Overstay", currentFrame, car.bbox, parkingSec, clipOffset);
 					}
 				}
 			}
@@ -1778,8 +2433,12 @@ private: void CheckViolations_Online(cv::Mat& currentFrame) {
 					if (car.id == violatingId) {
 						cv::Rect safeBbox = car.bbox & cv::Rect(0, 0, currentFrame.cols, currentFrame.rows);
 						if (safeBbox.area() > 0) {
-							cv::Mat croppedFrame = currentFrame(safeBbox).clone(); // [FIX] Clone only when capturing
-							AddViolationRecord_Online(violatingId, croppedFrame, L"Wrong Slot", currentFrame, car.bbox);
+							cv::Mat croppedFrame = currentFrame(safeBbox).clone();
+							int parkingSec = (int)(car.framesStill / (g_cameraFPS > 0 ? g_cameraFPS : 30.0));
+							int clipOffset = (g_videoClipStartTick > 0)
+								? (int)((cv::getTickCount() - g_videoClipStartTick) / cv::getTickFrequency())
+								: 0;
+							AddViolationRecord_Online(violatingId, croppedFrame, L"Wrong Slot", currentFrame, car.bbox, parkingSec, clipOffset);
 						}
 						break;
 					}
@@ -1792,7 +2451,6 @@ private: void CheckViolations_Online(cv::Mat& currentFrame) {
 			record->durationSeconds = (int)duration.TotalSeconds;
 		}
 	}
-
 	private: System::Void btnClearViolations_online_Click(System::Object^ sender, System::EventArgs^ e) {
 		violationsList_online->Clear();
 		violatingCarTimers_online->Clear();
