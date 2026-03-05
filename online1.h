@@ -1943,9 +1943,12 @@ private: System::Void UploadForm_FormClosing(System::Object^ sender, FormClosing
 		// [1 File Per Event]
 		std::string jsonPath = std::string(dateFolder) + "\\event_" + std::to_string(epochMs) + "_car_" + std::to_string(carId) + ".json";
 		
-		// Calculate seconds into the clip for media_seek_time_seconds
-		long long currentTick = cv::getTickCount();
-		int seekSeconds = (int)((currentTick - g_videoClipStartTick) / cv::getTickFrequency());
+		// Calculate seconds into the clip for media_seek_time_seconds based on exact frame count (10 FPS)
+		int seekSeconds = 0;
+		{
+			std::lock_guard<std::mutex> vl(g_videoWriterMutex_online);
+			seekSeconds = g_videoFramesWritten / 10;
+		}
 		if (seekSeconds < 0) seekSeconds = 0;
 
 		// Format timestamp as ISO-8601 string for MongoEngine DateTimeField
