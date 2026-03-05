@@ -122,9 +122,13 @@ private:
         } else if (path == "/api/parking_areas") {
             ServeParkingAreas(clientSocket, request);
         } else if (path.find("/locvideo/") == 0) {
-            ServeFileDirectly(clientSocket, "C:" + path);
+            ServeFileDirectly(clientSocket, "C:" + path, request);
         } else if (path.find("/smart_parking_violations/") == 0) {
-            ServeFileDirectly(clientSocket, "C:" + path);
+            ServeFileDirectly(clientSocket, "C:" + path, request);
+        } else if (path.find("/violations/") == 0) {
+            std::string realPath = path;
+            realPath.replace(0, 12, "/smart_parking_violations/");
+            ServeFileDirectly(clientSocket, "C:" + realPath, request);
         } else if (path == "/setup_online") {
             ServeHtml(clientSocket, "setup_online.html");
         } else if (path == "/setup_parking") {
@@ -269,7 +273,7 @@ private:
         closesocket(clientSocket);
     }
 
-    void ServeFileDirectly(SOCKET clientSocket, const std::string& fsPath) {
+    void ServeFileDirectly(SOCKET clientSocket, const std::string& fsPath, const std::string& httpRequest) {
         // Strip out the query param safely (e.g. ?time=45)
         std::string cleanPath = fsPath;
         size_t queryPos = cleanPath.find("?");
@@ -287,29 +291,72 @@ private:
             return;
         }
 
-        std::streamsize size = file.tellg();
+        std::streamsize fileSize = file.tellg();
         file.seekg(0, std::ios::beg);
 
         std::string contentType = "application/octet-stream";
-        if (cleanPath.find(".jpg") != std::string::npos) contentType = "image/jpeg";
+        if (cleanPath.find(".jpg") != std::string::npos || cleanPath.find(".jpeg") != std::string::npos) contentType = "image/jpeg";
         else if (cleanPath.find(".webm") != std::string::npos) contentType = "video/webm";
+        else if (cleanPath.find(".mp4") != std::string::npos) contentType = "video/mp4";
 
-        std::string responseHeader = "HTTP/1.1 200 OK\r\n"
-                                     "Content-Type: " + contentType + "\r\n"
-                                     "Access-Control-Allow-Origin: *\r\n"
-                                     "Connection: close\r\n"
-                                     "Content-Length: " + std::to_string(size) + "\r\n\r\n";
-                                     
-        send(clientSocket, responseHeader.c_str(), responseHeader.length(), 0);
+        long long start = 0;
+        long long end = fileSize - 1;
+        bool isRange = false;
 
-        char buffer[8192];
-        while (file.read(buffer, sizeof(buffer))) {
-            send(clientSocket, buffer, sizeof(buffer), 0);
-        }
-        if (file.gcount() > 0) {
-            send(clientSocket, buffer, file.gcount(), 0);
+        size_t rangePos = httpRequest.find("Range: bytes=");
+        if (rangePos != std::string::npos) {
+            isRange = true;
+            size_t startPos = rangePos + 13;
+            size_t dashPos = httpRequest.find("-", startPos);
+            size_t endLinePos = httpRequest.find("\r", startPos);
+            if (endLinePos == std::string::npos) endLinePos = httpRequest.find("\n", startPos);
+            
+            if (dashPos != std::string::npos && dashPos < endLinePos) {
+                std::string startStr = httpRequest.substr(startPos, dashPos - startPos);
+                std::string endStr = httpRequest.substr(dashPos + 1, endLinePos - dashPos - 1);
+                try { if (!startStr.empty()) start = std::stoll(startStr); } catch (...) {}
+                try { if (!endStr.empty() && endStr != " ") end = std::stoll(endStr); } catch (...) {}
+            }
         }
         
+        if (end >= fileSize) end = fileSize - 1;
+        if (start < 0) start = 0;
+        long long contentLength = end - start + 1;
+
+        std::string responseHeader;
+        if (isRange) {
+            responseHeader = "HTTP/1.1 206 Partial Content\r\n"
+                             "Content-Type: " + contentType + "\r\n"
+                             "Accept-Ranges: bytes\r\n"
+                             "Content-Range: bytes " + std::to_string(start) + "-" + std::to_string(end) + "/" + std::to_string(fileSize) + "\r\n"
+                             "Access-Control-Allow-Origin: *\r\n"
+                             "Connection: close\r\n"
+                             "Content-Length: " + std::to_string(contentLength) + "\r\n\r\n";
+        } else {
+            responseHeader = "HTTP/1.1 200 OK\r\n"
+                             "Content-Type: " + contentType + "\r\n"
+                             "Accept-Ranges: bytes\r\n"
+                             "Access-Control-Allow-Origin: *\r\n"
+                             "Connection: close\r\n"
+                             "Content-Length: " + std::to_string(contentLength) + "\r\n\r\n";
+        }
+
+        send(clientSocket, responseHeader.c_str(), responseHeader.length(), 0);
+
+        file.seekg(start, std::ios::beg);
+        char buffer[8192];
+        long long bytesToRead = contentLength;
+        while (bytesToRead > 0 && file.read(buffer, (std::streamsize)std::min((long long)sizeof(buffer), bytesToRead))) {
+            long long readBytes = file.gcount();
+            send(clientSocket, buffer, (int)readBytes, 0);
+            bytesToRead -= readBytes;
+        }
+
+        if (bytesToRead > 0 && file.gcount() > 0) {
+            send(clientSocket, buffer, (int)file.gcount(), 0);
+        }
+
+        file.close();
         closesocket(clientSocket);
     }
 
