@@ -20,11 +20,12 @@ struct ParkingSlot {
     SlotStatus status;
     int occupiedByTrackId;           // Track ID ???????????????
     float occupancyPercent;          // % ??????????????????
+    std::string type;                // "Car" or "Motorcycle"
     
-    ParkingSlot() : id(-1), status(SlotStatus::EMPTY), occupiedByTrackId(-1), occupancyPercent(0.0f) {}
+    ParkingSlot() : id(-1), type("Car"), status(SlotStatus::EMPTY), occupiedByTrackId(-1), occupancyPercent(0.0f) {}
     
-    ParkingSlot(int _id, const std::vector<cv::Point>& _poly) 
-        : id(_id), polygon(_poly), status(SlotStatus::EMPTY), occupiedByTrackId(-1), occupancyPercent(0.0f) {}
+    ParkingSlot(int _id, const std::vector<cv::Point>& _poly, const std::string& _type = "Car") 
+        : id(_id), polygon(_poly), type(_type), status(SlotStatus::EMPTY), occupiedByTrackId(-1), occupancyPercent(0.0f) {}
     
     // Get bounding box of polygon
     cv::Rect getBoundingBox() const {
@@ -81,6 +82,7 @@ struct ParkingTemplate {
             for (size_t i = 0; i < slots.size(); i++) {
                 std::string prefix = "slot_" + std::to_string(i);
                 fs << (prefix + "_id") << slots[i].id;
+                fs << (prefix + "_type") << slots[i].type;
                 fs << (prefix + "_points") << slots[i].polygon;
             }
             
@@ -113,6 +115,11 @@ struct ParkingTemplate {
                 std::string prefix = "slot_" + std::to_string(i);
                 ParkingSlot slot;
                 fs[prefix + "_id"] >> slot.id;
+                
+                cv::FileNode typeNode = fs[prefix + "_type"];
+                if (typeNode.empty()) slot.type = "Car"; // Backward compatibility
+                else typeNode >> slot.type;
+                
                 fs[prefix + "_points"] >> slot.polygon;
                 slots.push_back(slot);
             }
@@ -172,9 +179,9 @@ public:
     }
     
     // Add parking slot
-    void addSlot(const std::vector<cv::Point>& polygon) {
+    void addSlot(const std::vector<cv::Point>& polygon, const std::string& type = "Car") {
         int newId = slots.size() + 1;
-        slots.push_back(ParkingSlot(newId, polygon));
+        slots.push_back(ParkingSlot(newId, polygon, type));
     }
     
     // Clear all slots
@@ -252,12 +259,24 @@ public:
                 slots[bestSlotIdx].occupiedByTrackId = obj.id;
                 slots[bestSlotIdx].occupancyPercent = bestRatio;
                 
-                if (bestRatio >= 60.0f) {
-                    slots[bestSlotIdx].status = SlotStatus::OCCUPIED_GOOD;  // ?????
-                } else if (bestRatio >= 45.0f) {
-                    slots[bestSlotIdx].status = SlotStatus::OCCUPIED_OK;    // ??????
+                // Check for Wrong Vehicle Type violation
+                bool isCarObj = (obj.classId == 2 || obj.classId == 5 || obj.classId == 7);
+                bool isMotoObj = (obj.classId == 3);
+                bool isCarSlot = (slots[bestSlotIdx].type == "Car");
+                bool isMotoSlot = (slots[bestSlotIdx].type == "Motorcycle");
+                
+                if ((isCarObj && isMotoSlot) || (isMotoObj && isCarSlot)) {
+                    slots[bestSlotIdx].status = SlotStatus::ILLEGAL;
+                    // Note: ILLEGAL slot status will natively draw red in drawSlots()
                 } else {
-                    slots[bestSlotIdx].status = SlotStatus::OCCUPIED_BAD;   // ?????
+                    // Correct vehicle type, parse normal overlap status
+                    if (bestRatio >= 60.0f) {
+                        slots[bestSlotIdx].status = SlotStatus::OCCUPIED_GOOD;
+                    } else if (bestRatio >= 45.0f) {
+                        slots[bestSlotIdx].status = SlotStatus::OCCUPIED_OK;
+                    } else {
+                        slots[bestSlotIdx].status = SlotStatus::OCCUPIED_BAD;
+                    }
                 }
             }
             
@@ -320,10 +339,20 @@ public:
             cv::Mat overlay = result.clone();
             cv::drawContours(overlay, contours, 0, color, -1);
             cv::addWeighted(overlay, 0.3, result, 0.7, 0, result);
+
+            // Draw a clear, non-intrusive colored dot in the center to indicate vehicle type
+            cv::Point center = slot.getCenter();
+            
+            // Define colors for the center dot (Blue for Car, Orange for Moto)
+            cv::Scalar dotColor = (slot.type == "Car") ? cv::Scalar(255, 144, 30) : cv::Scalar(0, 165, 255); 
+            
+            // Draw a subtle dark border for the dot, then the dot itself
+            int radius = 8;
+            cv::circle(result, center, radius + 1, cv::Scalar(0, 0, 0), cv::FILLED);
+            cv::circle(result, center, radius, dotColor, cv::FILLED);
             
             // Draw slot ID and status
-            cv::Point center = slot.getCenter();
-            std::string label = "Slot " + std::to_string(slot.id);
+            std::string label = "S" + std::to_string(slot.id) + " (" + slot.type.substr(0,1) + ")";
             
             cv::putText(result, label, cv::Point(center.x - 30, center.y - 10),
                 cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(0, 0, 0), 2);

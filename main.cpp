@@ -66,11 +66,22 @@ inline cv::Mat GetRawFrameWrapperMain() {
 }
 
 inline bool TriggerSaveTemplateHeadlessWrapperMain(std::string xmlContent) {
-    std::ofstream out("parking_templates/web_template.xml");
+    std::string templateName = "web_template";
+    size_t nameStart = xmlContent.find("<name>");
+    if (nameStart != std::string::npos) {
+        size_t nameEnd = xmlContent.find("</name>", nameStart);
+        if (nameEnd != std::string::npos) {
+            templateName = xmlContent.substr(nameStart + 6, nameEnd - nameStart - 6);
+            templateName.erase(std::remove(templateName.begin(), templateName.end(), '\"'), templateName.end());
+        }
+    }
+    
+    std::string filename = "parking_templates/" + templateName + ".xml";
+    std::ofstream out(filename);
     if (!out) return false;
     out << xmlContent;
     out.close();
-    return LoadParkingTemplate_Online("parking_templates/web_template.xml");
+    return LoadParkingTemplate_Online(filename);
 }
 
 
