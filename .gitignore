@@ -34,9 +34,10 @@ bld/
 [Ll]ogs/
 
 # ==========================================
-# [CUSTOM] Parking Templates Folder
+# [CUSTOM] Parking Templates Folder & Debug
 # ==========================================
 parking_templates/
+debug_parking.txt
 
 # Visual Studio 2015/2017 cache/options directory
 .vs/

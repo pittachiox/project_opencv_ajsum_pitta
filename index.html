@@ -262,12 +262,22 @@
         <div class="sidebar">
             <div class="stats-grid">
                 <div class="stat-card stat-empty">
-                    <div class="stat-title">Empty Slots</div>
+                    <div class="stat-title">Empty Slots (Available)</div>
                     <div class="stat-value" id="val-empty">0</div>
+                    <div
+                        style="display: flex; justify-content: space-around; margin-top: 10px; font-size: 14px; color: var(--text-muted);">
+                        <div>🚗 Car: <b id="val-car-empty" style="color: var(--empty-color);">0</b></div>
+                        <div>🏍️ Moto: <b id="val-moto-empty" style="color: var(--empty-color);">0</b></div>
+                    </div>
                 </div>
                 <div class="stat-card stat-normal">
-                    <div class="stat-value" id="val-normal">0</div>
                     <div class="stat-title">Normally Occupied</div>
+                    <div class="stat-value" id="val-normal">0</div>
+                    <div
+                        style="display: flex; justify-content: space-around; margin-top: 10px; font-size: 14px; color: var(--text-muted);">
+                        <div>🚗 Car: <b id="val-car-normal" style="color: var(--normal-color);">0</b></div>
+                        <div>🏍️ Moto: <b id="val-moto-normal" style="color: var(--normal-color);">0</b></div>
+                    </div>
                 </div>
                 <div class="stat-card stat-violation">
                     <div class="stat-title">Violations</div>
@@ -302,7 +312,13 @@
 
                 // Update stats
                 document.getElementById('val-empty').innerText = data.empty || 0;
+                document.getElementById('val-car-empty').innerText = data.carEmpty || 0;
+                document.getElementById('val-moto-empty').innerText = data.motoEmpty || 0;
+
                 document.getElementById('val-normal').innerText = data.normal || 0;
+                document.getElementById('val-car-normal').innerText = data.carNormal || 0;
+                document.getElementById('val-moto-normal').innerText = data.motoNormal || 0;
+
                 document.getElementById('val-violation').innerText = data.violation || 0;
 
                 // Update logs

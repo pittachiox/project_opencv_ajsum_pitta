@@ -37,6 +37,7 @@ struct OnlineAppState {
 	std::set<int> violatingCarIds;
 	std::map<int, SlotStatus> slotStatuses;
 	std::map<int, float> slotOccupancy;
+	std::map<int, std::string> slotTypes; // [NEW] Track Car/Motorcycle
 	long long frameSequence = -1;
 };
 
@@ -412,6 +413,7 @@ static void ProcessFrameOnline(const cv::Mat& inputFrame, long long frameSeq) {
 
 		std::map<int, SlotStatus> calculatedStatuses;
 		std::map<int, float> calculatedOccupancy;
+		std::map<int, std::string> calculatedTypes;
 		std::set<int> violations;
 
 		bool parkingEnabled = g_parkingEnabled_online.load(); // [PHASE 1 FIX] Use atomic load
@@ -427,20 +429,28 @@ static void ProcessFrameOnline(const cv::Mat& inputFrame, long long frameSeq) {
 			for (const auto& slot : g_pm_logic_online->getSlots()) {
 				calculatedStatuses[slot.id] = slot.status;
 				calculatedOccupancy[slot.id] = slot.occupancyPercent;
+				calculatedTypes[slot.id] = slot.type;
 			}
 
-			// ตรวจจับรถจอดผิด
+			// ตรวจจับรถจอดผิด (จอดนอกช่อง หรือ จอดผิดประเภท)
 			for (const auto& car : trackedObjs) {
 				if (car.framesStill > 30) {
 					bool inAnySlot = false;
+                    bool inWrongTypeSlot = false;
+                    
 					for (const auto& slot : g_pm_logic_online->getSlots()) {
 						cv::Point center = (car.bbox.tl() + car.bbox.br()) * 0.5;
 						if (cv::pointPolygonTest(slot.polygon, center, false) >= 0) {
 							inAnySlot = true;
+                            if (slot.status == SlotStatus::ILLEGAL && slot.occupiedByTrackId == car.id) {
+                                inWrongTypeSlot = true;
+                            }
 							break;
 						}
 					}
-					if (!inAnySlot) {
+                    
+                    // Violation if either not in any slot OR parked in a wrong-type slot
+					if (!inAnySlot || inWrongTypeSlot) {
 						violations.insert(car.id);
 					}
 				}
@@ -452,6 +462,7 @@ static void ProcessFrameOnline(const cv::Mat& inputFrame, long long frameSeq) {
 			g_onlineState.cars = trackedObjs;
 			g_onlineState.slotStatuses = calculatedStatuses;
 			g_onlineState.slotOccupancy = calculatedOccupancy;
+			g_onlineState.slotTypes = calculatedTypes;
 			g_onlineState.violatingCarIds = violations;
 			g_onlineState.frameSequence = frameSeq;
 		}
@@ -660,10 +671,10 @@ static void VideoRecordingThreadFunc_Online(int width, int height) {
 	const int frameDelayMs = 1000 / targetFPS; // 100ms per frame
 
 	StartNewVideoClip_Online(width, height);
+	
+	auto nextFrameTime = std::chrono::steady_clock::now();
 
 	while (g_videoRecordingRunning.load()) {
-		auto loopStartTime = std::chrono::steady_clock::now();
-
 		cv::Mat frameToWrite;
 		{
 			std::lock_guard<std::mutex> lock(g_videoCurrentFrameMutex);
@@ -688,14 +699,19 @@ static void VideoRecordingThreadFunc_Online(int width, int height) {
 
 		if (needsNewClip) {
 			StartNewVideoClip_Online(width, height);
+			nextFrameTime = std::chrono::steady_clock::now(); // Reset anchor for the next brand new clip
 		}
 
-		// Calculate exact sleep time needed to maintain the 100ms rhythm relative to the clock
-		auto loopEndTime = std::chrono::steady_clock::now();
-		auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(loopEndTime - loopStartTime).count();
-		
-		if (elapsedMs < frameDelayMs) {
-			std::this_thread::sleep_for(std::chrono::milliseconds(frameDelayMs - elapsedMs));
+		// ALWAYS advance the clock by exactly 100ms and wait. This forces frame duplication if AI is slow
+		nextFrameTime += std::chrono::milliseconds(frameDelayMs);
+		auto now = std::chrono::steady_clock::now();
+		if (now < nextFrameTime) {
+			std::this_thread::sleep_until(nextFrameTime);
+		} else {
+			// Severe system lag recovery: If we fell behind real-time by more than 2 frames, snap clock to now
+			if (now > nextFrameTime + std::chrono::milliseconds(frameDelayMs * 2)) {
+				nextFrameTime = now;
+			}
 		}
 	}
 
@@ -1369,14 +1385,28 @@ private: System::Windows::Forms::Label^ label1;
 			if (parkingEnabledForStats && !state.slotStatuses.empty()) {
 				int emptyCount = 0;
 				int occupiedCount = 0;
+				int carEmpty = 0, carNormal = 0;
+				int motoEmpty = 0, motoNormal = 0;
 
 				for (const auto& slotEntry : state.slotStatuses) {
+					int slotId = slotEntry.first;
 					SlotStatus status = slotEntry.second;
+					
+					// Get the slot type
+					std::string type = "Car"; // Default
+					if (state.slotTypes.find(slotId) != state.slotTypes.end()) {
+						type = state.slotTypes[slotId];
+					}
+
 					if (status == SlotStatus::EMPTY) {
 						emptyCount++;
+						if (type == "Motorcycle") motoEmpty++;
+						else carEmpty++;
 					}
 					else {
 						occupiedCount++;
+						if (type == "Motorcycle") motoNormal++;
+						else carNormal++;
 					}
 				}
 
@@ -1389,6 +1419,10 @@ private: System::Windows::Forms::Label^ label1;
 				if (g_mjpegServer_online) {
 					std::string json = "{\"empty\":" + std::to_string(emptyCount) + 
 					                   ",\"normal\":" + std::to_string(occupiedCount) + 
+					                   ",\"carEmpty\":" + std::to_string(carEmpty) + 
+					                   ",\"carNormal\":" + std::to_string(carNormal) + 
+					                   ",\"motoEmpty\":" + std::to_string(motoEmpty) + 
+					                   ",\"motoNormal\":" + std::to_string(motoNormal) + 
 					                   ",\"violation\":" + std::to_string(violationCount) + ",\"logs\":[";
 					bool first = true;
 					for each (ViolationRecord_Online^ rec in violationsList_online) {
@@ -1992,26 +2026,47 @@ private: System::Void UploadForm_FormClosing(System::Object^ sender, FormClosing
 			state = g_onlineState;
 		}
 
-		int emptyCount = 0;
-		int occupiedCount = 0;
+		int carEmptyCount = 0;
+		int carOccupiedCount = 0;
+		int motoEmptyCount = 0;
+		int motoOccupiedCount = 0;
+
 		for (const auto& slotEntry : state.slotStatuses) {
-			if (slotEntry.second == SlotStatus::EMPTY) emptyCount++;
-			else occupiedCount++;
+			int slotId = slotEntry.first;
+			std::string type = "Car";
+			if (state.slotTypes.find(slotId) != state.slotTypes.end()) {
+				type = state.slotTypes[slotId];
+			}
+
+			if (type == "Motorcycle") {
+				if (slotEntry.second == SlotStatus::EMPTY) motoEmptyCount++;
+				else motoOccupiedCount++;
+			} else {
+				if (slotEntry.second == SlotStatus::EMPTY) carEmptyCount++;
+				else carOccupiedCount++;
+			}
 		}
-		int totalSlots = emptyCount + occupiedCount;
+		
+		int totalSlots = carEmptyCount + carOccupiedCount + motoEmptyCount + motoOccupiedCount;
 		int violationCount = state.violatingCarIds.size();
 
 		// Track state changes to prevent bloat
-		static int lastEmpty = -1;
-		static int lastOccupied = -1;
+		static int lastCarEmpty = -1;
+		static int lastCarOccupied = -1;
+		static int lastMotoEmpty = -1;
+		static int lastMotoOccupied = -1;
 		static int lastViolation = -1;
 
-		if (emptyCount == lastEmpty && occupiedCount == lastOccupied && violationCount == lastViolation) {
+		if (carEmptyCount == lastCarEmpty && carOccupiedCount == lastCarOccupied && 
+			motoEmptyCount == lastMotoEmpty && motoOccupiedCount == lastMotoOccupied && 
+			violationCount == lastViolation) {
 			return; // No change in numbers, do not generate a file
 		}
 
-		lastEmpty = emptyCount;
-		lastOccupied = occupiedCount;
+		lastCarEmpty = carEmptyCount;
+		lastCarOccupied = carOccupiedCount;
+		lastMotoEmpty = motoEmptyCount;
+		lastMotoOccupied = motoOccupiedCount;
 		lastViolation = violationCount;
 
 		SYSTEMTIME st;
@@ -2040,8 +2095,12 @@ private: System::Void UploadForm_FormClosing(System::Object^ sender, FormClosing
 			{"description", "Front Parking Monitoring"},
 			{"camera_id", camId},
 			{"total_slots", totalSlots},
-			{"available_slots", emptyCount},
-			{"occupied_slots", occupiedCount},
+			{"total_car_slots", carEmptyCount + carOccupiedCount},
+			{"available_car_slots", carEmptyCount},
+			{"occupied_car_slots", carOccupiedCount},
+			{"total_motorcycle_slots", motoEmptyCount + motoOccupiedCount},
+			{"available_motorcycle_slots", motoEmptyCount},
+			{"occupied_motorcycle_slots", motoOccupiedCount},
 			{"violation_slots", violationCount},
 			{"created_date", std::string(timeBuf)},
 			{"updated_date", std::string(timeBuf)}
@@ -2217,9 +2276,19 @@ private: void CheckViolations_Online(cv::Mat& currentFrame) {
 		}
 
 		for each(int violatingId in state.violatingCarIds) {
+			// Determine specific violation type
+			System::String^ specificViolation = L"Wrong Parking"; // Default: parked outside slots
+			
+			for (const auto& slot : g_pm_logic_online->getSlots()) {
+				if (slot.status == SlotStatus::ILLEGAL && slot.occupiedByTrackId == violatingId) {
+					specificViolation = L"Wrong Vehicle Type";
+					break;
+				}
+			}
+
 			bool already_captured = false;
 			for each(ViolationRecord_Online^ record in violationsList_online) {
-				if (record->carId == violatingId && record->violationType == L"Wrong Slot") {
+				if (record->carId == violatingId && record->violationType == specificViolation) {
 					already_captured = true;
 					break;
 				}
@@ -2231,7 +2300,7 @@ private: void CheckViolations_Online(cv::Mat& currentFrame) {
 						cv::Rect safeBbox = car.bbox & cv::Rect(0, 0, currentFrame.cols, currentFrame.rows);
 						if (safeBbox.area() > 0) {
 							cv::Mat croppedFrame = currentFrame(safeBbox).clone(); // [FIX] Clone only when capturing
-							AddViolationRecord_Online(violatingId, croppedFrame, L"Wrong Slot", currentFrame, car.bbox);
+							AddViolationRecord_Online(violatingId, croppedFrame, specificViolation, currentFrame, car.bbox);
 						}
 						break;
 					}

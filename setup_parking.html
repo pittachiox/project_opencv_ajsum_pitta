@@ -252,39 +252,73 @@
             align-items: center;
         }
 
-        #slotList {
+        /* Slot list columns */
+        .columns-container {
+            display: flex;
+            gap: 8px;
+            height: 180px;
+            min-height: 180px;
+            flex-shrink: 0;
+            margin-top: 4px;
+        }
+
+        .list-column {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
             border: 1px solid #444;
             background: #2a2a2a;
             border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .col-header {
+            font-size: 12px;
+            font-weight: bold;
+            color: #fff;
+            padding: 6px;
+            text-align: center;
+        }
+
+        .header-car {
+            background: #2980b9;
+        }
+
+        .header-moto {
+            background: #8e44ad;
+        }
+
+        .slot-list {
             list-style: none;
             padding: 0;
-            height: 180px;
+            margin: 0;
             overflow-y: auto;
+            flex: 1;
             font-family: Consolas, monospace;
             font-size: 13px;
         }
 
-        #slotList li {
-            padding: 8px 12px;
+        .slot-list li {
+            padding: 8px 6px;
             cursor: pointer;
             border-bottom: 1px solid #333;
             transition: background 0.15s;
             color: #ddd;
+            text-align: center;
         }
 
-        #slotList li:last-child {
+        .slot-list li:last-child {
             border-bottom: none;
         }
 
-        #slotList li:hover {
+        .slot-list li:hover {
             background: #3a3a3a;
         }
 
-        #slotList li.selected {
+        .slot-list li.selected {
             background: #2c4a6b;
             font-weight: bold;
-            color: #63b3ed;
-            border-left: 3px solid #3498db;
+            color: #ffff00;
         }
 
         /* Stats panel */
@@ -387,12 +421,22 @@
 
             <hr class="divider">
 
+            <!-- Type Selection -->
+            <label style="margin-top:4px;">Select Slot Type:</label>
+            <div class="btn-row" style="margin-bottom:8px;">
+                <button class="btn btn-blue" id="btnTypeCar" onclick="setSlotType('Car')"
+                    style="border: 2px solid white;">Car</button>
+                <button class="btn btn-purple" id="btnTypeMoto" onclick="setSlotType('Motorcycle')"
+                    style="opacity: 0.5;">Moto</button>
+            </div>
+
             <!-- Draw/Action buttons (mirrors btnClearAll + btnSaveTemplate) -->
             <div class="btn-row">
                 <button class="btn btn-red" id="btnClearAll" onclick="clearAll()" disabled>Clear All</button>
                 <button class="btn btn-green" id="btnSave" onclick="saveTemplate()" disabled>Save</button>
             </div>
-            <button class="btn btn-purple btn-full" id="btnLoadTemplate" onclick="loadTemplate()">Load Template</button>
+            <button class="btn btn-full" style="background:#444;" id="btnLoadTemplate" onclick="loadTemplate()">Load
+                Template</button>
 
             <hr class="divider">
 
@@ -406,9 +450,18 @@
 
             <hr class="divider">
 
-            <!-- Slot list (mirrors label3 + listBoxSlots + btnDeleteSlot) -->
+            <!-- Slot lists -->
             <div class="list-header">P Parking Slots</div>
-            <ul id="slotList"></ul>
+            <div class="columns-container">
+                <div class="list-column">
+                    <div class="col-header header-car">Car Slots</div>
+                    <ul id="slotListCar" class="slot-list"></ul>
+                </div>
+                <div class="list-column">
+                    <div class="col-header header-moto">Motorcycle Slots</div>
+                    <ul id="slotListMoto" class="slot-list"></ul>
+                </div>
+            </div>
             <div class="btn-row">
                 <button class="btn btn-blue" id="btnFinishSlot" onclick="finishSlot()" disabled style="flex:1.5">Finish
                     Slot (Right-click)</button>
@@ -447,15 +500,23 @@
         const ctx = canvas.getContext('2d');
         const container = document.getElementById('canvas-container');
         const statusBar = document.getElementById('statusBar');
-        const slotList = document.getElementById('slotList');
 
         let bgImage = null;       // Background image (cv::Mat frame)
-        let slots = [];           // Array of completed slots [{id, polygon:[{x,y},...]}]
+        let slots = [];           // Array of completed slots [{id, type, polygon:[{x,y},...]}]
         let currentPoly = [];     // Points being drawn
         let isDrawing = false;
         let selectedSlotIdx = -1;
         let nextSlotId = 1;
         let imageW = 0, imageH = 0;  // Natural image dimensions
+        let currentType = 'Car';
+
+        function setSlotType(type) {
+            currentType = type;
+            document.getElementById('btnTypeCar').style.opacity = type === 'Car' ? '1' : '0.5';
+            document.getElementById('btnTypeCar').style.border = type === 'Car' ? '2px solid white' : 'none';
+            document.getElementById('btnTypeMoto').style.opacity = type === 'Motorcycle' ? '1' : '0.5';
+            document.getElementById('btnTypeMoto').style.border = type === 'Motorcycle' ? '2px solid white' : 'none';
+        }
 
         // ===================== Canvas sizing =====================
         function resizeCanvas() {
@@ -511,7 +572,10 @@
                 ctx.moveTo(p0.x, p0.y);
                 slot.polygon.forEach(p => { const c = imgToCanvas(p.x, p.y); ctx.lineTo(c.x, c.y); });
                 ctx.closePath();
-                ctx.strokeStyle = idx === selectedSlotIdx ? '#ffff00' : '#00ff00';
+
+                // Color based on type
+                let baseColor = slot.type === 'Motorcycle' ? '#9b59b6' : '#00ffff';
+                ctx.strokeStyle = idx === selectedSlotIdx ? '#ffff00' : baseColor;
                 ctx.lineWidth = 2;
                 ctx.stroke();
                 // Slot ID label
@@ -529,7 +593,7 @@
                 const p0 = imgToCanvas(currentPoly[0].x, currentPoly[0].y);
                 ctx.moveTo(p0.x, p0.y);
                 currentPoly.forEach(p => { const c = imgToCanvas(p.x, p.y); ctx.lineTo(c.x, c.y); });
-                ctx.strokeStyle = '#0000ff';
+                ctx.strokeStyle = currentType === 'Motorcycle' ? '#9b59b6' : '#00ffff';
                 ctx.lineWidth = 2;
                 ctx.stroke();
                 currentPoly.forEach(p => {
@@ -576,7 +640,7 @@
                 }
                 return;
             }
-            slots.push({ id: nextSlotId++, polygon: [...currentPoly] });
+            slots.push({ id: nextSlotId++, type: currentType, polygon: [...currentPoly] });
             currentPoly = [];
             isDrawing = slots.length > 0;
             updateSlotList();
@@ -608,13 +672,24 @@
         }
 
         function updateSlotList() {
-            slotList.innerHTML = '';
+            document.getElementById('slotListCar').innerHTML = '';
+            document.getElementById('slotListMoto').innerHTML = '';
+
             slots.forEach((slot, idx) => {
                 const li = document.createElement('li');
-                li.textContent = 'Slot ' + slot.id + ' (' + slot.polygon.length + ' points)';
-                li.onclick = () => { selectedSlotIdx = idx; updateSlotList(); redraw(); };
+                li.textContent = `Slot ${slot.id} (${slot.polygon.length} pts)`;
+                li.onclick = (e) => {
+                    selectedSlotIdx = idx;
+                    updateSlotList();
+                    redraw();
+                };
                 if (idx === selectedSlotIdx) li.classList.add('selected');
-                slotList.appendChild(li);
+
+                if (slot.type === 'Motorcycle') {
+                    document.getElementById('slotListMoto').appendChild(li);
+                } else {
+                    document.getElementById('slotListCar').appendChild(li);
+                }
             });
             document.getElementById('btnDeleteSlot').disabled = selectedSlotIdx < 0;
             document.getElementById('cntEmpty').textContent = slots.length;
@@ -663,17 +738,45 @@
         function parseXMLTemplate(xmlText) {
             const parser = new DOMParser();
             const doc = parser.parseFromString(xmlText, 'text/xml');
-            const slotEls = doc.querySelectorAll('slot');
+
+            const countNode = doc.querySelector('slotCount');
             slots = [];
-            slotEls.forEach(slotEl => {
-                const id = parseInt(slotEl.querySelector('id')?.textContent || '0');
-                const pts = slotEl.querySelector('points')?.textContent?.trim().split(/\s+/).map(Number) || [];
-                const polygon = [];
-                for (let i = 0; i + 1 < pts.length; i += 2) {
-                    polygon.push({ x: pts[i], y: pts[i + 1] });
+
+            if (!countNode) {
+                // Legacy parser (if it was made before this update)
+                const slotEls = doc.querySelectorAll('slot');
+                slotEls.forEach(slotEl => {
+                    const id = parseInt(slotEl.querySelector('id')?.textContent || '0');
+                    const pts = slotEl.querySelector('points')?.textContent?.trim().split(/\s+/).map(Number) || [];
+                    const polygon = [];
+                    for (let i = 0; i + 1 < pts.length; i += 2) {
+                        polygon.push({ x: pts[i], y: pts[i + 1] });
+                    }
+                    if (polygon.length >= 3) slots.push({ id, type: 'Car', polygon });
+                });
+            } else {
+                // OpenCV-compliant parser
+                const count = parseInt(countNode.textContent);
+                for (let i = 0; i < count; i++) {
+                    const idNode = doc.querySelector(`slot_${i}_id`);
+                    const typeNode = doc.querySelector(`slot_${i}_type`);
+                    const ptsNode = doc.querySelector(`slot_${i}_points`);
+                    if (!idNode || !ptsNode) continue;
+
+                    const id = parseInt(idNode.textContent);
+                    const type = typeNode ? typeNode.textContent.replace(/"/g, '').trim() : 'Car';
+                    const ptsText = ptsNode.textContent.trim().split(/\s+/);
+
+                    const polygon = [];
+                    // Read the plain sequence of space-separated integers
+                    const ptsTextArr = ptsNode.textContent.trim().split(/\s+/);
+                    for (let j = 0; j + 1 < ptsTextArr.length; j += 2) {
+                        polygon.push({ x: parseInt(ptsTextArr[j]), y: parseInt(ptsTextArr[j + 1]) });
+                    }
+                    slots.push({ id, type, polygon });
                 }
-                if (polygon.length >= 3) slots.push({ id, polygon });
-            });
+            }
+
             nextSlotId = slots.length > 0 ? Math.max(...slots.map(s => s.id)) + 1 : 1;
             updateSlotList();
             setActionEnabled(true);
@@ -688,12 +791,24 @@
                 return;
             }
             const name = document.getElementById('txtName').value || 'ParkingTemplate_1';
-            let xml = '<?xml version="1.0" encoding="utf-8"?>\n<opencv_storage>\n<slots>\n';
-            slots.forEach(slot => {
+            const desc = document.getElementById('txtDesc').value || 'Parking setup';
+
+            let xml = '<?xml version="1.0"?>\n<opencv_storage>\n';
+            xml += `<name>${name}</name>\n`;
+            xml += `<description>"${desc}"</description>\n`;
+            xml += `<imageWidth>${imageW || 1280}</imageWidth>\n`;
+            xml += `<imageHeight>${imageH || 720}</imageHeight>\n`;
+            xml += `<slotCount>${slots.length}</slotCount>\n`;
+
+            slots.forEach((slot, i) => {
+                xml += `  <slot_${i}_id>${slot.id}</slot_${i}_id>\n`;
+                xml += `  <slot_${i}_type>"${slot.type}"</slot_${i}_type>\n`;
                 const pts = slot.polygon.map(p => p.x + ' ' + p.y).join(' ');
-                xml += '  <slot>\n    <id>' + slot.id + '</id>\n    <points>\n      ' + pts + '</points></slot>\n';
+
+                // Write plain points without type_id
+                xml += `  <slot_${i}_points>\n    ${pts}</slot_${i}_points>\n`;
             });
-            xml += '</slots>\n</opencv_storage>\n';
+            xml += '</opencv_storage>\n';
 
             fetch('/api/save_template', {
                 method: 'POST',
