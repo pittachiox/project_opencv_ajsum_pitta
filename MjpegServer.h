@@ -755,13 +755,7 @@ public:
         }
         frameCV.notify_all();
 
-        // Debug: print frame counter every 30 frames
-        static int dbgFrameCount = 0;
-        if (++dbgFrameCount % 30 == 0) {
-            printf("[STREAM] Frame #%d pushed to MJPEG server (%d clients)\n",
-                dbgFrameCount, GetClientCount());
-            fflush(stdout);
-        }
+		// (Removed debug print here to save resources)
     }
 
     void SetStats(const std::string& json) {

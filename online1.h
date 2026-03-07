@@ -105,6 +105,8 @@ __declspec(selectany) long long g_processedSeq_online = 0;
 __declspec(selectany) std::mutex g_processedMutex_online;
 
 // *** [NEW] MJPEG SERVER ***
+extern MjpegServer* g_globalWebServer;
+
 __declspec(selectany) MjpegServer* g_mjpegServer_online = nullptr;
 
 // *** [PHASE 2] PERFORMANCE OPTIMIZATION ***
@@ -750,12 +752,17 @@ static void VideoRecordingThreadFunc_Online(int width, int height) {
 	
 	auto nextFrameTime = std::chrono::steady_clock::now();
 
+	cv::Mat lastValidFrame;
+
 	while (g_videoRecordingRunning.load()) {
 		cv::Mat frameToWrite;
 		{
 			std::lock_guard<std::mutex> lock(g_videoCurrentFrameMutex);
 			if (!g_videoCurrentFrame.empty()) {
-				frameToWrite = g_videoCurrentFrame.clone(); // ALWAYS get the latest, even if duplicated
+				frameToWrite = g_videoCurrentFrame.clone(); 
+				lastValidFrame = frameToWrite.clone();
+			} else if (!lastValidFrame.empty()) {
+				frameToWrite = lastValidFrame.clone(); // Duplicate last frame to pad the timeline
 			}
 		}
 
@@ -766,8 +773,9 @@ static void VideoRecordingThreadFunc_Online(int width, int height) {
 				g_videoWriter_online->write(frameToWrite);
 				g_videoFramesWritten++;
 
-				// Check if 60 seconds (exactly 600 frames) have elapsed to ensure 60s playback!
-				if (g_videoFramesWritten >= (targetFPS * VIDEO_CLIP_SECONDS)) {
+				// Force split strictly by clock time
+				double secondsElapsed = ((double)cv::getTickCount() - (double)g_videoClipStartTick) / cv::getTickFrequency();
+				if (secondsElapsed >= VIDEO_CLIP_SECONDS) {
 					needsNewClip = true;
 				}
 			}
@@ -783,11 +791,6 @@ static void VideoRecordingThreadFunc_Online(int width, int height) {
 		auto now = std::chrono::steady_clock::now();
 		if (now < nextFrameTime) {
 			std::this_thread::sleep_until(nextFrameTime);
-		} else {
-			// Severe system lag recovery: If we fell behind real-time by more than 2 frames, snap clock to now
-			if (now > nextFrameTime + std::chrono::milliseconds(frameDelayMs * 2)) {
-				nextFrameTime = now;
-			}
 		}
 	}
 
@@ -1567,7 +1570,11 @@ private: System::Windows::Forms::Label^ label1;
 		                   ",\"motoNormal\":" + std::to_string(motoNormal) +
 		                   ",\"violation\":" + std::to_string(violationCount) + ",\"logs\":[";
 		bool first = true;
-		for each (ViolationRecord_Online^ rec in violationsList_online) {
+		int logCount = 0;
+		// Send up to the 5 most recent logs
+		for (int i = violationsList_online->Count - 1; i >= 0; i--) {
+			if (logCount >= 5) break;
+			ViolationRecord_Online^ rec = violationsList_online[i];
 			if (!first) json += ",";
 			System::String^ ts = rec->captureTime.ToString("HH:mm:ss");
 			System::String^ vt = rec->violationType;
@@ -1575,9 +1582,15 @@ private: System::Windows::Forms::Label^ label1;
 			std::string typeStr = msclr::interop::marshal_as<std::string>(vt);
 			json += "{\"id\":" + std::to_string(rec->carId) + ",\"time\":\"" + timeStr + "\",\"type\":\"" + typeStr + "\"}";
 			first = false;
+			logCount++;
 		}
 		json += "]}";
-		g_mjpegServer_online->SetStats(json);
+
+		static std::string last_sent_json = "";
+		if (json != last_sent_json) {
+			last_sent_json = json;
+			g_mjpegServer_online->SetStats(json);
+		}
 	}
 
 	// Called by web API disconnect — stops camera threads but keeps the web server running
@@ -1698,26 +1711,12 @@ private: System::Windows::Forms::Label^ label1;
             }
         } catch(...) {}
 
-		// *** [HEADLESS] Skip creating a new MJPEG server if already set by main.cpp ***
-		// g_mjpegServer_online is assigned from g_globalWebServer in headless mode
-		if (!g_mjpegServer_online) {
-			g_mjpegServer_online = new MjpegServer(8080);
-			if (g_mjpegServer_online->Start()) {
-                try {
-				    std::string ip = GetLocalIP();
-                    if (lblNetworkStream != nullptr) {
-				        lblNetworkStream->Text = gcnew String(("Stream: http://" + ip + ":8080").c_str());
-                    }
-                } catch(...) {}
-			} else {
-                try {
-                    if (lblNetworkStream != nullptr) {
-				        lblNetworkStream->Text = "Stream: Failed to start";
-                    }
-                } catch(...) {}
-				delete g_mjpegServer_online;
-				g_mjpegServer_online = nullptr;
-			}
+		// *** [HEADLESS] Bind to the existing global MJPEG server from main.cpp ***
+		if (!g_mjpegServer_online && g_globalWebServer) {
+			g_mjpegServer_online = g_globalWebServer;
+			DumpLog("[SERVER] Successfully linked AI Engine to Global Web Dashboard on port 8080.");
+		} else if (!g_mjpegServer_online) {
+			DumpLog("[SERVER ERROR] g_globalWebServer is null. Web Dashboard will not receive stats.");
 		} else {
 			// Already running (headless mode) — just update label if it exists
 			try {
@@ -1809,9 +1808,6 @@ private: void ProcessingLoopHeadless() {
 						cv::Mat violFrame = renderedFrame.clone();
 						CheckViolations_Online(violFrame);
 					}
-
-					// Update stats JSON for the web dashboard (rate-limited by g_lastViolationCheck_online)
-					UpdateWebStats();
 				}
 
 				lastProcessedSeq = seq;
@@ -2355,6 +2351,9 @@ private: System::Void UploadForm_FormClosing(System::Object^ sender, FormClosing
 		record->captureTime = System::DateTime::Now;
 		record->durationSeconds = 0;
 
+		std::string vTypeStr = msclr::interop::marshal_as<std::string>(violationType);
+		DumpLog("[LOG-APPEND] Adding Violation Record for Car ID: " + std::to_string(carId) + " | Type: " + vTypeStr + " | Current List Size: " + std::to_string(violationsList_online->Count));
+
 		violationsList_online->Add(record);
 		RefreshViolationPanel_Online();
 	}
@@ -2498,6 +2497,8 @@ private: void CheckViolations_Online(cv::Mat& currentFrame) {
 			System::TimeSpan duration = System::DateTime::Now - record->captureTime;
 			record->durationSeconds = (int)duration.TotalSeconds;
 		}
+
+		UpdateWebStats();
 	}
 
 	private: System::Void btnClearViolations_online_Click(System::Object^ sender, System::EventArgs^ e) {
