@@ -613,11 +613,8 @@ static void DrawSceneOnline(const cv::Mat& frame, long long displaySeq, cv::Mat&
 					cv::Rect roi = box & cv::Rect(0, 0, outResult.cols, outResult.rows);
 					if (roi.area() > 0) {
 						cv::Mat roiMat = outResult(roi);
-						// [PHASE 3] Reuse red overlay buffer
-						if (g_redOverlayBuffer_online.size() != roi.size() || g_redOverlayBuffer_online.type() != CV_8UC3) {
-							g_redOverlayBuffer_online = cv::Mat(roi.size(), CV_8UC3, cv::Scalar(0, 0, 255));
-						}
-						cv::addWeighted(roiMat, 0.6, g_redOverlayBuffer_online, 0.4, 0, roiMat);
+						cv::Mat redBuf(roi.size(), CV_8UC3, cv::Scalar(0, 0, 255));
+						cv::addWeighted(roiMat, 0.6, redBuf, 0.4, 0, roiMat);
 					}
 					cv::rectangle(outResult, box, cv::Scalar(0, 0, 255), 2);
 				}
@@ -1750,8 +1747,7 @@ private: System::Windows::Forms::Label^ label1;
 						g_frameSeq_online++;
 						currentSeq = g_frameSeq_online;
 					}
-				} else {
-					Threading::Thread::Sleep(50);
+					Threading::Thread::Sleep(5); // [OPTIMIZED] 5ms instead of 50ms to allow up to 200+ FPS reading speed
 					continue;
 				}
 			} else {
@@ -1821,10 +1817,10 @@ private: void ProcessingLoopHeadless() {
 				lastProcessedSeq = seq;
 			}
 			else {
-				Threading::Thread::Sleep(10);
+				Threading::Thread::Sleep(2); // [OPTIMIZED] 2ms sleep to uncap AI framerate processing
 			}
 		}
-		catch (...) { Threading::Thread::Sleep(50); }
+		catch (...) { Threading::Thread::Sleep(5); }
 	}
 }
 
@@ -2364,6 +2360,11 @@ private: System::Void UploadForm_FormClosing(System::Object^ sender, FormClosing
 	}
 
 	private: void RefreshViolationPanel_Online() {
+		if (this->InvokeRequired) {
+			this->Invoke(gcnew System::Action(this, &UploadForm::RefreshViolationPanel_Online));
+			return;
+		}
+
 		if (!flpViolations_online) return;
 
 		flpViolations_online->Controls->Clear();
@@ -2446,10 +2447,7 @@ private: void CheckViolations_Online(cv::Mat& currentFrame) {
 			state = g_onlineState;
 		}
 
-		DumpLog("[VCHECK] state.cars=" + std::to_string(state.cars.size()) + " violating=" + std::to_string(state.violatingCarIds.size()) + " parkingEnabled=" + std::string(g_parkingEnabled_online.load() ? "yes" : "no"));
-
 		for each(auto car in state.cars) {
-			DumpLog("[VCHECK] car.id=" + std::to_string(car.id) + " framesStill=" + std::to_string(car.framesStill));
 			if (car.framesStill > 300) {
 				if (!violatingCarTimers_online->ContainsKey(car.id)) {
 					violatingCarTimers_online->Add(car.id, System::DateTime::Now);

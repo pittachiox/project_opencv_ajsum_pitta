@@ -46,7 +46,7 @@ private:
     
     int port;
 
-    std::string latestStatsJson = "{\"empty\":0,\"normal\":0,\"violation\":0,\"logs\":[]}";
+    std::string latestStatsJson = "{\"empty\":0,\"normal\":0,\"carEmpty\":0,\"carNormal\":0,\"motoEmpty\":0,\"motoNormal\":0,\"violation\":0,\"logs\":[]}";
     std::mutex statsMutex;
 
     using SaveTemplateCallback = std::function<bool(std::string)>;

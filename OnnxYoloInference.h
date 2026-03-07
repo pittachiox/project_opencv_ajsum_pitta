@@ -89,14 +89,12 @@ public:
             std::vector<int64_t> input_shape = { 1, 3, 640, 640 };
             size_t input_tensor_size = 1 * 3 * 640 * 640;
             
-            // blob is already in CHW format from cv::dnn::blobFromImage
-            std::vector<float> input_tensor_values(input_tensor_size);
-            memcpy(input_tensor_values.data(), blob.data, input_tensor_size * sizeof(float));
-            
+            // [OPTIMIZED] Zero-copy from OpenCV to ONNX Tensor
+            // blob is already CHW continuous floats from cv::dnn::blobFromImage
             Ort::MemoryInfo memory_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
             Ort::Value input_tensor = Ort::Value::CreateTensor<float>(
                 memory_info,
-                input_tensor_values.data(),
+                (float*)blob.data,
                 input_tensor_size,
                 input_shape.data(),
                 input_shape.size()

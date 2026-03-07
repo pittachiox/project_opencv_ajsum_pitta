@@ -21,11 +21,17 @@ struct ParkingSlot {
     int occupiedByTrackId;           // Track ID ???????????????
     float occupancyPercent;          // % ??????????????????
     std::string type;                // "Car" or "Motorcycle"
+    int tempOccupiedBy;              // Transient: occupied by track ID in current frame
+    int tempClassId;                 // Transient: class ID occupying in current frame
+    int framesOccupied;              // Stabilization: frames continuously occupied
+    int framesEmpty;                 // Stabilization: frames continuously empty
     
-    ParkingSlot() : id(-1), type("Car"), status(SlotStatus::EMPTY), occupiedByTrackId(-1), occupancyPercent(0.0f) {}
+    ParkingSlot() : id(-1), type("Car"), status(SlotStatus::EMPTY), occupiedByTrackId(-1), occupancyPercent(0.0f), 
+                    tempOccupiedBy(-1), tempClassId(-1), framesOccupied(0), framesEmpty(0) {}
     
     ParkingSlot(int _id, const std::vector<cv::Point>& _poly, const std::string& _type = "Car") 
-        : id(_id), polygon(_poly), type(_type), status(SlotStatus::EMPTY), occupiedByTrackId(-1), occupancyPercent(0.0f) {}
+        : id(_id), polygon(_poly), type(_type), status(SlotStatus::EMPTY), occupiedByTrackId(-1), occupancyPercent(0.0f),
+          tempOccupiedBy(-1), tempClassId(-1), framesOccupied(0), framesEmpty(0) {}
     
     // Get bounding box of polygon
     cv::Rect getBoundingBox() const {
@@ -161,55 +167,14 @@ private:
     std::vector<ParkingSlot> slots;
     cv::Mat templateFrame;  // First frame for template creation
     
-    // Calculate intersection area between bbox and polygon (Optimized for FPS)
-    float calculateIntersectionRatio(const cv::Rect& bbox, const std::vector<cv::Point>& polygon) {
-        if (polygon.size() < 3 || bbox.area() == 0) return 0.0f;
-        
-        // 1. Fast AABB (Axis-Aligned Bounding Box) Rejection
-        cv::Rect polyBbox = cv::boundingRect(polygon);
-        cv::Rect intersectionRect = bbox & polyBbox;
-        
-        if (intersectionRect.area() == 0) {
-            return 0.0f; // No bounding box overlap, skip expensive polygon math
-        }
-
-        // 2. Exact Polygon Intersection using a tiny cropped mask (ROI)
-        // Instead of allocating full 1920x1080 masks, we only allocate a mask the size of intersectionRect
-        cv::Mat bboxMask = cv::Mat::zeros(intersectionRect.size(), CV_8UC1);
-        cv::Mat polyMask = cv::Mat::zeros(intersectionRect.size(), CV_8UC1);
-        
-        // Shift drawing coordinates to match the cropped ROI
-        cv::Rect localBbox(bbox.x - intersectionRect.x, bbox.y - intersectionRect.y, bbox.width, bbox.height);
-        std::vector<cv::Point> localPoly;
-        localPoly.reserve(polygon.size());
-        for (const auto& pt : polygon) {
-            localPoly.push_back(cv::Point(pt.x - intersectionRect.x, pt.y - intersectionRect.y));
-        }
-        
-        // Draw locally
-        cv::rectangle(bboxMask, localBbox, cv::Scalar(255), -1);
-        std::vector<std::vector<cv::Point>> contours = { localPoly };
-        cv::drawContours(polyMask, contours, 0, cv::Scalar(255), -1);
-        
-        // Bitwise AND on tiny ROI mask
-        cv::Mat intersection;
-        cv::bitwise_and(bboxMask, polyMask, intersection);
-        
-        int intersectionArea = cv::countNonZero(intersection);
-        int bboxArea = bbox.area();
-        
-        return bboxArea > 0 ? (float)intersectionArea / bboxArea * 100.0f : 0.0f;
+    // [OPTIMIZED] Check if a car's center is inside the slot
+    bool isCarInSlot(const cv::Rect& carBbox, const ParkingSlot& slot) const {
+        if (slot.polygon.size() < 3) return false;
+        cv::Point center(carBbox.x + carBbox.width / 2, carBbox.y + carBbox.height / 2);
+        return cv::pointPolygonTest(slot.polygon, center, false) >= 0;
     }
 
 public:
-    ParkingManager() {}
-    
-    // [NEW] ?????????????????????????????
-    bool isCarInSlot(const cv::Rect& carBbox, const ParkingSlot& slot) const {
-        float ratio = const_cast<ParkingManager*>(this)->calculateIntersectionRatio(carBbox, slot.polygon);
-        return ratio > 5.0f; // ???????????????? 5% = ??????????
-    }
-    
     // Set template frame (first frame of video)
     void setTemplateFrame(const cv::Mat& frame) {
         templateFrame = frame.clone();
@@ -262,11 +227,9 @@ public:
     
     // Update slot status based on tracked objects
     void updateSlotStatus(const std::vector<TrackedObject>& trackedObjects) {
-        // Reset all slots to empty
+        // First reset transient info for this specific frame
         for (auto& slot : slots) {
-            slot.status = SlotStatus::EMPTY;
-            slot.occupiedByTrackId = -1;
-            slot.occupancyPercent = 0.0f;
+            slot.occupancyPercent = 0.0f; // Reset transient
         }
         
         // Check each tracked object
@@ -278,61 +241,55 @@ public:
             
             bool foundSlot = false;
             int bestSlotIdx = -1;
-            float bestRatio = 0.0f;
             
-            // Find best matching slot
+            // Find best matching slot (first slot that contains the center)
             for (size_t i = 0; i < slots.size(); i++) {
-                float ratio = calculateIntersectionRatio(obj.bbox, slots[i].polygon);
-                
-                if (ratio > bestRatio) {
-                    bestRatio = ratio;
-                    bestSlotIdx = i;
+                if (isCarInSlot(obj.bbox, slots[i])) {
+                    bestSlotIdx = static_cast<int>(i);
+                    break;
                 }
             }
             
-            // Update slot status based on ratio
-            if (bestSlotIdx >= 0 && bestRatio > 5.0f) { // At least 5% overlap
-                foundSlot = true;
-                slots[bestSlotIdx].occupiedByTrackId = obj.id;
-                slots[bestSlotIdx].occupancyPercent = bestRatio;
+            // Note occupancy in current frame
+            if (bestSlotIdx >= 0) {
+                slots[bestSlotIdx].occupancyPercent = 100.0f;
+                slots[bestSlotIdx].tempOccupiedBy = obj.id;
+                slots[bestSlotIdx].tempClassId = obj.classId;
+            }
+        }
+        
+        // Stabilize statuses across frames (3 frame delay)
+        for (auto& slot : slots) {
+            if (slot.occupancyPercent > 0.0f) {
+                slot.framesOccupied++;
+                slot.framesEmpty = 0;
+            } else {
+                slot.framesEmpty++;
+                slot.framesOccupied = 0;
+            }
+            
+            if (slot.status == SlotStatus::EMPTY && slot.framesOccupied >= 3) {
+                slot.occupiedByTrackId = slot.tempOccupiedBy;
                 
                 // Check for Wrong Vehicle Type violation
-                bool isCarObj = (obj.classId == 2 || obj.classId == 5 || obj.classId == 7);
-                bool isMotoObj = (obj.classId == 3);
-                bool isCarSlot = (slots[bestSlotIdx].type == "Car");
-                bool isMotoSlot = (slots[bestSlotIdx].type == "Motorcycle");
+                bool isCarObj = (slot.tempClassId == 2 || slot.tempClassId == 5 || slot.tempClassId == 7);
+                bool isMotoObj = (slot.tempClassId == 3);
+                bool isCarSlot = (slot.type == "Car");
+                bool isMotoSlot = (slot.type == "Motorcycle");
                 
                 if ((isCarObj && isMotoSlot) || (isMotoObj && isCarSlot)) {
-                    slots[bestSlotIdx].status = SlotStatus::ILLEGAL;
-                    // Note: ILLEGAL slot status will natively draw red in drawSlots()
+                    slot.status = SlotStatus::ILLEGAL;
                 } else {
-                    // Correct vehicle type, parse normal overlap status
-                    if (bestRatio >= 60.0f) {
-                        slots[bestSlotIdx].status = SlotStatus::OCCUPIED_GOOD;
-                    } else if (bestRatio >= 45.0f) {
-                        slots[bestSlotIdx].status = SlotStatus::OCCUPIED_OK;
-                    } else {
-                        slots[bestSlotIdx].status = SlotStatus::OCCUPIED_BAD;
-                    }
+                    slot.status = SlotStatus::OCCUPIED_GOOD;
                 }
+            } 
+            else if (slot.status != SlotStatus::EMPTY && slot.framesEmpty >= 3) {
+                slot.status = SlotStatus::EMPTY;
+                slot.occupiedByTrackId = -1;
             }
-            
-            // If vehicle not in any slot (illegal parking)
-            if (!foundSlot || bestRatio < 5.0f) {
-                // Create virtual "illegal" slot for this vehicle
-                ParkingSlot illegalSlot;
-                illegalSlot.id = -1;
-                illegalSlot.status = SlotStatus::ILLEGAL;
-                illegalSlot.occupiedByTrackId = obj.id;
-                illegalSlot.occupancyPercent = 0.0f;
-                
-                // Use bbox as polygon
-                illegalSlot.polygon = {
-                    cv::Point(obj.bbox.x, obj.bbox.y),
-                    cv::Point(obj.bbox.x + obj.bbox.width, obj.bbox.y),
-                    cv::Point(obj.bbox.x + obj.bbox.width, obj.bbox.y + obj.bbox.height),
-                    cv::Point(obj.bbox.x, obj.bbox.y + obj.bbox.height)
-                };
+            else if (slot.status != SlotStatus::EMPTY && slot.occupancyPercent > 0.0f) {
+                // Instantly update who is occupying if type changed without fully emptying
+                slot.occupiedByTrackId = slot.tempOccupiedBy;
             }
         }
     }
@@ -347,24 +304,18 @@ public:
             
             switch (slot.status) {
                 case SlotStatus::EMPTY:
-                    color = cv::Scalar(255, 255, 255);  // ???
+                    color = cv::Scalar(255, 255, 255);  // White overlay base, we use dot color
                     statusText = "Empty";
                     break;
                 case SlotStatus::OCCUPIED_GOOD:
-                    color = cv::Scalar(255, 200, 0);    // ???
-                    statusText = "OK " + std::to_string((int)slot.occupancyPercent) + "%";
-                    break;
                 case SlotStatus::OCCUPIED_OK:
-                    color = cv::Scalar(255, 0, 255);    // ????
-                    statusText = "Fair " + std::to_string((int)slot.occupancyPercent) + "%";
-                    break;
                 case SlotStatus::OCCUPIED_BAD:
-                    color = cv::Scalar(0, 0, 255);      // ???
-                    statusText = "Bad " + std::to_string((int)slot.occupancyPercent) + "%";
+                    color = (slot.type == "Car") ? cv::Scalar(255, 144, 30) : cv::Scalar(0, 165, 255); // Blue for Car, Orange for Moto
+                    statusText = "Occupied";
                     break;
                 case SlotStatus::ILLEGAL:
-                    color = cv::Scalar(0, 0, 255);      // ???
-                    statusText = "ILLEGAL!";
+                    color = cv::Scalar(0, 0, 255);      // Red
+                    statusText = "Wrong Type";
                     break;
             }
             
