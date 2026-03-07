@@ -1668,8 +1668,8 @@ private: System::Windows::Forms::Label^ label1;
 	}
 
 	private: void CameraReaderLoop() {
-		// [GPU ACCELERATION] Remove FPS throttling - process as fast as GPU can handle!
-		// Camera will naturally limit to its own FPS (e.g., 30 FPS), but GPU processing is now uncapped
+		// [GPU ACCELERATION] Camera Thread now ONLY reads frames as fast as possible to prevent RTSP buffer lag.
+		// Drawing and UI updates are moved to the AI thread to guarantee perfectly synced bounding boxes.
 
 		while (!shouldStop) {
 			cv::Mat tempFrame;
@@ -1677,67 +1677,18 @@ private: System::Windows::Forms::Label^ label1;
 
 			if (g_cap && g_cap->isOpened()) {
 				success = g_cap->read(tempFrame);
-                if (success && !tempFrame.empty()) {
-                    long long currentSeq;
-                    {
-                        std::lock_guard<std::mutex> lock(g_frameMutex);
-                        g_latestRawFrame = tempFrame; // [FIX] Use shallow copy 
-                        g_frameSeq_online++;
-                        currentSeq = g_frameSeq_online;
-                    }
-
-                    // [FIX] Relaxed frame drop logic (10 frames tolerance instead of 3)
-                    bool shouldDrop = false;
-                    {
-                        std::lock_guard<std::mutex> lock(g_processedMutex_online);
-                        if (currentSeq - g_processedSeq_online > MAX_FRAME_LAG_ONLINE) {
-                            shouldDrop = true;
-                            g_droppedFrames_online++;
-                        }
-                    }
-
-                    if (!shouldDrop) {
-                        cv::Mat renderedFrame;
-                        DrawSceneOnline(tempFrame, currentSeq, renderedFrame);
-
-                        if (!renderedFrame.empty()) {
-                            std::lock_guard<std::mutex> lock(g_processedMutex_online);
-                            g_processedFrame_online = renderedFrame; // [FIX] Shallow copy
-                            g_processedSeq_online = currentSeq;
-                            g_processedFramesCount_online++;
-
-                            // [FIX] Update MJPEG Server inside the loop so it streams out!
-                            if (g_mjpegServer_online) {
-                                g_mjpegServer_online->SetLatestFrame(g_processedFrame_online);
-                            }
-
-                            // [PHASE 1] Scale down to ~720p max to prevent CPU VP8 encoder lag
-                            cv::Mat scaledFrame;
-                            double maxW = 1280.0;
-                            if (renderedFrame.cols > maxW) {
-                                double scale = maxW / renderedFrame.cols;
-                                cv::resize(renderedFrame, scaledFrame, cv::Size(), scale, scale);
-                            } else {
-                                scaledFrame = renderedFrame;
-                            }
-
-                            // [PHASE 1] Start DVR with extreme precision on the exact camera resolution
-                            StartVideoRecordingThread_Online(scaledFrame.cols, scaledFrame.rows);
-
-                            // Update the global frame for the duplicate-based DVR system
-                            {
-                                std::lock_guard<std::mutex> vidLock(g_videoCurrentFrameMutex);
-                                g_videoCurrentFrame = scaledFrame.clone();
-                            }
-                        }
-                    }
-
-                    // [GPU] No artificial delay - process next frame immediately!
-                } else {
-                    // [FIX] Don't break immediately, might be temporary network hiccup
+				if (success && !tempFrame.empty()) {
+					long long currentSeq;
+					{
+						std::lock_guard<std::mutex> lock(g_frameMutex);
+						g_latestRawFrame = tempFrame; // Latest frame for AI to pick up
+						g_frameSeq_online++;
+						currentSeq = g_frameSeq_online;
+					}
+				} else {
 					Threading::Thread::Sleep(50);
 					continue;
-                }
+				}
 			} else {
 				break; // Camera is closed, terminate loop
 			}
@@ -1753,7 +1704,40 @@ private: void ProcessingLoopHeadless() {
 			GetRawFrameOnline(frameToProcess, seq);
 
 			if (!frameToProcess.empty() && seq > lastProcessedSeq) {
+				// 1. Process AI
 				ProcessFrameOnline(frameToProcess, seq);
+				
+				// 2. Draw purely synchronous with AI to guarantee perfect bounding box alignment
+				cv::Mat renderedFrame;
+				DrawSceneOnline(frameToProcess, seq, renderedFrame);
+
+				if (!renderedFrame.empty()) {
+					std::lock_guard<std::mutex> lock(g_processedMutex_online);
+					g_processedFrame_online = renderedFrame;
+					g_processedSeq_online = seq;
+					g_processedFramesCount_online++;
+
+					if (g_mjpegServer_online) {
+						g_mjpegServer_online->SetLatestFrame(g_processedFrame_online);
+					}
+
+					cv::Mat scaledFrame;
+					double maxW = 1280.0;
+					if (renderedFrame.cols > maxW) {
+						double scale = maxW / renderedFrame.cols;
+						cv::resize(renderedFrame, scaledFrame, cv::Size(), scale, scale);
+					} else {
+						scaledFrame = renderedFrame;
+					}
+
+					StartVideoRecordingThread_Online(scaledFrame.cols, scaledFrame.rows);
+
+					{
+						std::lock_guard<std::mutex> vidLock(g_videoCurrentFrameMutex);
+						g_videoCurrentFrame = scaledFrame.clone();
+					}
+				}
+
 				lastProcessedSeq = seq;
 			}
 			else {
