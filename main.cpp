@@ -1,5 +1,6 @@
 ﻿#include "pch.h"
 #include "online1.h"
+#include "popup1.h"
 #include "MjpegServer.h"
 #include <msclr/marshal_cppstd.h>
 #include <thread>
@@ -25,19 +26,18 @@ void StreamingThreadFunc() {
         cv::Mat outFrame;
         long long displaySeq = 0;
 
-        // Get the processed frame (AI-annotated)
+        // Get the already-drawn, fully-processed frame from ProcessingLoopHeadless
+        // (DrawSceneOnline is called inside ProcessingLoopHeadless, not here)
         GetProcessedFrameOnline(outFrame, displaySeq);
 
         if (!outFrame.empty() && displaySeq != lastSeq) {
-            // Overlay parking zones on top (mirrors DrawSceneOnline)
-            cv::Mat result;
-            DrawSceneOnline(outFrame, displaySeq, result);
-            if (!result.empty() && g_globalWebServer) {
-                g_globalWebServer->SetLatestFrame(result);
+            // Send directly to the global web server (no re-drawing!)
+            if (g_globalWebServer) {
+                g_globalWebServer->SetLatestFrame(outFrame);
             }
             lastSeq = displaySeq;
         } else if (outFrame.empty()) {
-            // No processed frame yet — try showing raw camera frame
+            // No processed frame yet — show raw camera frame
             cv::Mat raw;
             long long rawSeq = 0;
             GetRawFrameOnline(raw, rawSeq);
@@ -77,11 +77,18 @@ inline bool TriggerSaveTemplateHeadlessWrapperMain(std::string xmlContent) {
     }
     
     std::string filename = "parking_templates/" + templateName + ".xml";
+    DumpLog("[API] Extracted template name: " + templateName + " -> Saving to: " + filename);
     std::ofstream out(filename);
-    if (!out) return false;
+    if (!out) {
+        DumpLog("[API] ERROR: Could not open " + filename + " for writing!");
+        return false;
+    }
     out << xmlContent;
     out.close();
-    return LoadParkingTemplate_Online(filename);
+    
+    bool loadResult = LoadParkingTemplate_Online(filename);
+    DumpLog("[API] LoadParkingTemplate_Online returned: " + std::string(loadResult ? "true" : "false"));
+    return loadResult;
 }
 
 
@@ -107,6 +114,16 @@ inline bool TriggerOnlineCameraHeadlessWrapperMain(std::string ip, std::string p
     } catch (...) {
         DumpLog("[CONNECT EXCEPTION] Unknown exception occurred!");
         return false;
+    }
+}
+
+inline void TriggerDisconnectHeadlessWrapperMain() {
+    DumpLog("[DISCONNECT] Received disconnect request.");
+    if (ConsoleApplication3::UploadForm::Instance != nullptr) {
+        ConsoleApplication3::UploadForm::Instance->StopProcessingPublic();
+        DumpLog("[DISCONNECT] Camera stopped successfully.");
+    } else {
+        DumpLog("[DISCONNECT] WARNING: UploadForm::Instance is null.");
     }
 }
 
@@ -152,33 +169,25 @@ void Main(array<String^>^ args) {
     Application::EnableVisualStyles();
     Application::SetCompatibleTextRenderingDefault(false);
 
-    // Start MJPEG + HTTP server
-    if (!g_globalWebServer) {
-        g_globalWebServer = new MjpegServer(8080);
-        g_globalWebServer->Start();
-    }
-
-    // CRITICAL: point g_mjpegServer_online (used by online1.h processing worker)
-    // to the same server instance so SetLatestFrame() calls actually feed our web server
-    g_mjpegServer_online = g_globalWebServer;
-
-    // Initialize UploadForm silently (loads AI model in background)
-    ConsoleApplication3::UploadForm^ onlineForm = gcnew ConsoleApplication3::UploadForm();
-
-    // Register web API callbacks
-    g_globalWebServer->SetConnectOnlineCallback(&TriggerOnlineCameraHeadlessWrapperMain);
-    g_globalWebServer->SetSaveTemplateCallback(&TriggerSaveTemplateHeadlessWrapperMain);
-    g_globalWebServer->SetGetFrameCallback(&GetProcessedFrameWrapperMain);
-    g_globalWebServer->SetGetRawFrameCallback(&GetRawFrameWrapperMain);
-
-    printf("[SERVER] Smart Parking Web Server is running!\n");
-    printf("[SERVER] Open a browser to view the interface.\n");
+    // [GPU UPDATE] Instead of initializing everything here in a headless loop, 
+    // we give control back to popup1 (The Pre-Launch GPU Configuration Screen)
+    // popup1 will handle launching the Web server and UploadForm after GPU selection.
+    
+    printf("[SERVER] Booting GPU Configuration Launcher...\n");
     fflush(stdout);
 
-    // Open browser to home page using LAN IP
-    System::String^ localIp = GetLocalIPMain();
-    System::Diagnostics::Process::Start("http://" + localIp + ":8080/");
+    // Prepare Web Server callbacks BEFORE launching popup1
+    g_globalWebServer = new MjpegServer(8080);
+    g_globalWebServer->onGetFrame = GetProcessedFrameWrapperMain;
+    g_globalWebServer->onGetRawFrame = GetRawFrameWrapperMain;
+    g_globalWebServer->onSaveTemplate = TriggerSaveTemplateHeadlessWrapperMain;
+    g_globalWebServer->onConnectOnline = TriggerOnlineCameraHeadlessWrapperMain;
+    g_globalWebServer->onDisconnect = TriggerDisconnectHeadlessWrapperMain;
 
-    // Headless message loop
-    Application::Run();
+    // Start the streamer thread to continuously feed frames to the MjpegServer
+    g_streamThreadRunning = true;
+    std::thread(StreamingThreadFunc).detach();
+
+    ConsoleApplication3::popup1^ launcher = gcnew ConsoleApplication3::popup1();
+    Application::Run(launcher);
 }

@@ -99,6 +99,7 @@ struct ParkingTemplate {
         try {
             cv::FileStorage fs(filename, cv::FileStorage::READ);
             if (!fs.isOpened()) {
+                OutputDebugStringA(("[ERROR] loadFromFile: Failed to open FileStorage for " + filename + "\n").c_str());
                 return false;
             }
             
@@ -107,27 +108,48 @@ struct ParkingTemplate {
             fs["imageWidth"] >> imageSize.width;
             fs["imageHeight"] >> imageSize.height;
             
-            int slotCount;
+            int slotCount = 0;
             fs["slotCount"] >> slotCount;
+            
+            OutputDebugStringA(("[INFO] loadFromFile: Parsed generic info. slotCount: " + std::to_string(slotCount) + "\n").c_str());
             
             slots.clear();
             for (int i = 0; i < slotCount; i++) {
                 std::string prefix = "slot_" + std::to_string(i);
                 ParkingSlot slot;
+                
+                if (fs[prefix + "_id"].empty()) {
+                    OutputDebugStringA(("[ERROR] loadFromFile: Missing " + prefix + "_id node\n").c_str());
+                    return false;
+                }
                 fs[prefix + "_id"] >> slot.id;
                 
                 cv::FileNode typeNode = fs[prefix + "_type"];
                 if (typeNode.empty()) slot.type = "Car"; // Backward compatibility
                 else typeNode >> slot.type;
                 
+                if (fs[prefix + "_points"].empty()) {
+                    OutputDebugStringA(("[ERROR] loadFromFile: Missing " + prefix + "_points node\n").c_str());
+                    return false;
+                }
                 fs[prefix + "_points"] >> slot.polygon;
                 slots.push_back(slot);
             }
             
             fs.release();
+            OutputDebugStringA(("[INFO] loadFromFile: Successfully loaded template with " + std::to_string(slots.size()) + " slots\n").c_str());
             return true;
         }
+        catch (const cv::Exception& e) {
+            OutputDebugStringA(("[ERROR] cv::Exception in loadFromFile: " + std::string(e.what()) + "\n").c_str());
+            return false;
+        }
+        catch (const std::exception& e) {
+            OutputDebugStringA(("[ERROR] std::exception in loadFromFile: " + std::string(e.what()) + "\n").c_str());
+            return false;
+        }
         catch (...) {
+            OutputDebugStringA("[ERROR] Unknown exception in loadFromFile\n");
             return false;
         }
     }
@@ -139,22 +161,37 @@ private:
     std::vector<ParkingSlot> slots;
     cv::Mat templateFrame;  // First frame for template creation
     
-    // Calculate intersection area between bbox and polygon
+    // Calculate intersection area between bbox and polygon (Optimized for FPS)
     float calculateIntersectionRatio(const cv::Rect& bbox, const std::vector<cv::Point>& polygon) {
         if (polygon.size() < 3 || bbox.area() == 0) return 0.0f;
         
-        // Create masks
-        cv::Mat bboxMask = cv::Mat::zeros(templateFrame.size(), CV_8UC1);
-        cv::Mat polyMask = cv::Mat::zeros(templateFrame.size(), CV_8UC1);
+        // 1. Fast AABB (Axis-Aligned Bounding Box) Rejection
+        cv::Rect polyBbox = cv::boundingRect(polygon);
+        cv::Rect intersectionRect = bbox & polyBbox;
         
-        // Draw bbox
-        cv::rectangle(bboxMask, bbox, cv::Scalar(255), -1);
+        if (intersectionRect.area() == 0) {
+            return 0.0f; // No bounding box overlap, skip expensive polygon math
+        }
+
+        // 2. Exact Polygon Intersection using a tiny cropped mask (ROI)
+        // Instead of allocating full 1920x1080 masks, we only allocate a mask the size of intersectionRect
+        cv::Mat bboxMask = cv::Mat::zeros(intersectionRect.size(), CV_8UC1);
+        cv::Mat polyMask = cv::Mat::zeros(intersectionRect.size(), CV_8UC1);
         
-        // Draw polygon
-        std::vector<std::vector<cv::Point>> contours = { polygon };
+        // Shift drawing coordinates to match the cropped ROI
+        cv::Rect localBbox(bbox.x - intersectionRect.x, bbox.y - intersectionRect.y, bbox.width, bbox.height);
+        std::vector<cv::Point> localPoly;
+        localPoly.reserve(polygon.size());
+        for (const auto& pt : polygon) {
+            localPoly.push_back(cv::Point(pt.x - intersectionRect.x, pt.y - intersectionRect.y));
+        }
+        
+        // Draw locally
+        cv::rectangle(bboxMask, localBbox, cv::Scalar(255), -1);
+        std::vector<std::vector<cv::Point>> contours = { localPoly };
         cv::drawContours(polyMask, contours, 0, cv::Scalar(255), -1);
         
-        // Calculate intersection
+        // Bitwise AND on tiny ROI mask
         cv::Mat intersection;
         cv::bitwise_and(bboxMask, polyMask, intersection);
         

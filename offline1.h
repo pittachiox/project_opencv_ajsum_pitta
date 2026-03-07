@@ -15,6 +15,7 @@
 #include "ParkingSlot.h"
 #include "MjpegServer.h"  // [NEW] Added MjpegServer
 #include "ViolationDetailForm.h"
+#include "OnnxYoloInference.h" // [NEW] Added for ONNX GPU support
 
 #pragma managed(push, off)
 #include <opencv2/opencv.hpp>
@@ -58,7 +59,8 @@ __declspec(selectany) MjpegServer* g_mjpegServer_offline = nullptr;
 __declspec(selectany) AppState g_appState;
 __declspec(selectany) std::mutex g_stateMutex;
 
-__declspec(selectany) cv::dnn::Net* g_net_offline = nullptr;
+__declspec(selectany) cv::dnn::Net* g_net_offline = nullptr; // [DEPRECATED]
+__declspec(selectany) OnnxYoloInference* g_onnx_net_offline = nullptr; // [NEW] ONNX Runtime GPU
 __declspec(selectany) std::vector<std::string> g_classes_offline;
 __declspec(selectany) std::vector<cv::Scalar> g_colors_offline;
 __declspec(selectany) BYTETracker* g_tracker_offline = nullptr;
@@ -173,12 +175,16 @@ static void InitBackend(const std::string& modelPath) {
 	std::lock_guard<std::mutex> lock(g_aiMutex_offline);
 	g_modelReady_offline = false;
 	if (g_net_offline) { delete g_net_offline; g_net_offline = nullptr; }
+	if (g_onnx_net_offline) { delete g_onnx_net_offline; g_onnx_net_offline = nullptr; }
 	if (g_tracker_offline) { delete g_tracker_offline; g_tracker_offline = nullptr; }
 
 	try {
-		g_net_offline = new cv::dnn::Net(cv::dnn::readNetFromONNX(modelPath));
-		g_net_offline->setPreferableBackend(cv::dnn::DNN_BACKEND_OPENCV);
-		g_net_offline->setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
+		g_onnx_net_offline = new OnnxYoloInference();
+		if (!g_onnx_net_offline->loadModel(modelPath, true, g_selectedGpuId)) {
+			delete g_onnx_net_offline;
+			g_onnx_net_offline = nullptr;
+			return;
+		}
 		g_tracker_offline = new BYTETracker(90, 0.25f);
 		g_classes_offline = { "person", "bicycle", "car", "motorcycle", "bus" };
 		g_colors_offline.clear();
@@ -239,7 +245,7 @@ static void OpenCamera(const std::string& filename) {
 static void ProcessFrame(const cv::Mat& inputFrame, long long frameSeq) {
 	{
 		std::lock_guard<std::mutex> lock(g_aiMutex_offline);
-		if (inputFrame.empty() || !g_net_offline || !g_modelReady_offline || !g_tracker_offline) return;
+		if (inputFrame.empty() || !g_onnx_net_offline || !g_modelReady_offline || !g_tracker_offline) return;
 	}
 
 	try {
@@ -254,8 +260,7 @@ static void ProcessFrame(const cv::Mat& inputFrame, long long frameSeq) {
 		std::vector<cv::Mat> outputs;
 		{
 			std::lock_guard<std::mutex> lock(g_aiMutex_offline);
-			g_net_offline->setInput(blob);
-			g_net_offline->forward(outputs, g_net_offline->getUnconnectedOutLayersNames());
+			g_onnx_net_offline->forward(blob, outputs);
 		}
 
 		if (outputs.empty() || outputs[0].empty()) return;

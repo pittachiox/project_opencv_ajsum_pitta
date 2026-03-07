@@ -16,7 +16,8 @@
 #include <functional>
 #include <fstream>
 #include <mutex>
-
+#include <algorithm>
+#include <cctype>
 static std::mutex g_logMutex;
 inline void DumpLog(const std::string& msg) {
     std::lock_guard<std::mutex> lock(g_logMutex);
@@ -50,15 +51,19 @@ private:
 
     using SaveTemplateCallback = std::function<bool(std::string)>;
     using GetFrameCallback = std::function<cv::Mat()>;
+    using DisconnectCallback = std::function<void()>;
+public:
     ConnectOnlineCallback onConnectOnline;
     SaveTemplateCallback onSaveTemplate;
     GetFrameCallback onGetFrame;
     GetFrameCallback onGetRawFrame;
-public:
+    DisconnectCallback onDisconnect;
+    
     void SetConnectOnlineCallback(ConnectOnlineCallback cb) { onConnectOnline = cb; }
     void SetSaveTemplateCallback(SaveTemplateCallback cb) { onSaveTemplate = cb; }
     void SetGetFrameCallback(GetFrameCallback cb) { onGetFrame = cb; }
     void SetGetRawFrameCallback(GetFrameCallback cb) { onGetRawFrame = cb; }
+    void SetDisconnectCallback(DisconnectCallback cb) { onDisconnect = cb; }
 private:
 
     void ServerLoop() {
@@ -83,7 +88,7 @@ private:
     }
 
     void HandleClient(SOCKET clientSocket) {
-        char buffer[2048];
+        char buffer[4096];
         int bytesRead = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
         if (bytesRead <= 0) {
             closesocket(clientSocket);
@@ -91,6 +96,36 @@ private:
         }
         buffer[bytesRead] = '\0';
         std::string request(buffer);
+        
+        // Only try to read a full body for POST requests — skip for GET/streaming
+        bool isPost = (request.size() >= 4 && request[0] == 'P' && request[1] == 'O');
+        if (isPost) {
+            // Find Content-Length in headers (case-insensitive search on just the header portion)
+            size_t headersEnd = request.find("\r\n\r\n");
+            if (headersEnd != std::string::npos) {
+                std::string headers = request.substr(0, headersEnd);
+                // Lowercase only the small headers block
+                std::string headersLower = headers;
+                std::transform(headersLower.begin(), headersLower.end(), headersLower.begin(), ::tolower);
+                
+                size_t contentLengthPos = headersLower.find("content-length: ");
+                if (contentLengthPos != std::string::npos) {
+                    size_t clEnd = headersLower.find("\r\n", contentLengthPos);
+                    if (clEnd != std::string::npos) {
+                        int expectedLength = std::stoi(headersLower.substr(contentLengthPos + 16, clEnd - (contentLengthPos + 16)));
+                        int currentBodyLength = (int)request.length() - (int)(headersEnd + 4);
+                        int remainingBytes = expectedLength - currentBodyLength;
+                        while (remainingBytes > 0) {
+                            int chunkRead = recv(clientSocket, buffer, std::min((int)sizeof(buffer) - 1, remainingBytes), 0);
+                            if (chunkRead <= 0) break;
+                            buffer[chunkRead] = '\0';
+                            request += buffer;
+                            remainingBytes -= chunkRead;
+                        }
+                    }
+                }
+            }
+        }
         
         size_t firstSpace = request.find(' ');
         size_t secondSpace = request.find(' ', firstSpace + 1);
@@ -117,6 +152,8 @@ private:
             ServeSaveTemplate(clientSocket, request);
         } else if (path == "/api/connect_online" && request.find("POST") == 0) {
             ServeConnectOnline(clientSocket, request);
+        } else if (path == "/api/disconnect" && request.find("POST") == 0) {
+            ServeDisconnect(clientSocket);
         } else if (path == "/api/anomaly_events") {
             ServeAnomalyEvents(clientSocket, request);
         } else if (path == "/api/parking_areas") {
@@ -376,6 +413,23 @@ private:
         closesocket(clientSocket);
     }
 
+    void ServeDisconnect(SOCKET clientSocket) {
+        DumpLog("[HTTP] Received /api/disconnect");
+        if (onDisconnect) {
+            DisconnectCallback cb = onDisconnect;
+            std::thread([cb]() { cb(); }).detach();
+        }
+        std::string jsonResponse = "{\"status\":\"disconnected\"}";
+        std::string response =
+            "HTTP/1.1 200 OK\r\n"
+            "Content-Type: application/json\r\n"
+            "Access-Control-Allow-Origin: *\r\n"
+            "Content-Length: " + std::to_string(jsonResponse.length()) + "\r\n"
+            "Connection: close\r\n\r\n" + jsonResponse;
+        send(clientSocket, response.c_str(), response.length(), 0);
+        closesocket(clientSocket);
+    }
+
     void ServeConnectOnline(SOCKET clientSocket, const std::string& request) {
         std::string ip = "192.168.1.100", port = "8080", reqPath = "/video";
         
@@ -484,14 +538,17 @@ private:
     void ServeSaveTemplate(SOCKET clientSocket, const std::string& request) {
         size_t bodyPos = request.find("\r\n\r\n");
         if (bodyPos == std::string::npos) {
+            DumpLog("[API] /save_template -> Failed to find body delimiter.");
             closesocket(clientSocket);
             return;
         }
         std::string body = request.substr(bodyPos + 4);
+        DumpLog("[API] /save_template -> Extracted XML body of size " + std::to_string(body.length()) + " bytes.");
 
         bool success = false;
         if (onSaveTemplate) {
             success = onSaveTemplate(body);
+            DumpLog("[API] /save_template -> onSaveTemplate returned " + std::string(success ? "true" : "false"));
         }
 
         std::string jsonResponse = "{\"status\":\"" + std::string(success ? "success" : "error") + "\"}";

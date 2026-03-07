@@ -84,6 +84,7 @@ __declspec(selectany) std::mutex        g_videoCurrentFrameMutex;
 __declspec(selectany) cv::Mat           g_videoCurrentFrame; // The frame to duplicate if AI lags
 __declspec(selectany) bool g_modelReady = false;
 __declspec(selectany) std::atomic<bool> g_parkingEnabled_online(false); // [PHASE 1 FIX] Use atomic for thread safety
+__declspec(selectany) bool templateSet_online = false; // [FIX] Required globally for template resetting
 
 const int YOLO_INPUT_SIZE = 640;
 const float CONF_THRESHOLD = 0.25f;
@@ -303,9 +304,9 @@ static void InitGlobalModel(const std::string& modelPath) {
 	if (g_tracker) { delete g_tracker; g_tracker = nullptr; }
 
 	try {
-		// Use ONNX Runtime with GPU acceleration
+		// Use ONNX Runtime with GPU acceleration and user-selected Device ID
 		g_onnx_net = new OnnxYoloInference();
-		if (!g_onnx_net->loadModel(modelPath, true)) { // true = use GPU
+		if (!g_onnx_net->loadModel(modelPath, true, g_selectedGpuId)) { // true = use GPU, pass ID
 			delete g_onnx_net;
 			g_onnx_net = nullptr;
 			OutputDebugStringA("[ERROR] Failed to load ONNX model with GPU\n");
@@ -335,6 +336,7 @@ static void InitGlobalModel(const std::string& modelPath) {
 // [NEW] โหลด Parking Template
 static bool LoadParkingTemplate_Online(const std::string& filename) {
 	ResetParkingCache_Online();
+	templateSet_online = false; // [FIX] Force the engine to register the new template frame geometry
 
 	if (!g_pm_logic_online) g_pm_logic_online = new ParkingManager();
 	if (!g_pm_display_online) g_pm_display_online = new ParkingManager();
@@ -496,7 +498,6 @@ static void ProcessFrameOnline(const cv::Mat& inputFrame, long long frameSeq) {
 
 		bool parkingEnabled = g_parkingEnabled_online.load(); // [PHASE 1 FIX] Use atomic load
 		if (parkingEnabled && g_pm_logic_online) {
-			static bool templateSet_online = false;
 			if (!templateSet_online) {
 				g_pm_logic_online->setTemplateFrame(inputFrame);
 				templateSet_online = true;
@@ -854,6 +855,10 @@ namespace ConsoleApplication3 {
 
 	public: bool StartCameraHeadless(String^ ip, String^ port, String^ path) {
 		int currentAttemptId = ++g_connectionAttemptId_online;
+		
+		// [FIX CRASH] Stop any existing reader threads to prevent AccessViolation
+		// when OpenGlobalCameraFromIP deletes g_cap while the thread is still reading.
+		StopProcessing();
 		
 		if (!path->StartsWith("/")) {
 			path = "/" + path;
@@ -1438,8 +1443,6 @@ private: System::Windows::Forms::Label^ label1;
 
 	// *** [OPTIMIZED] UI TIMER - หยิบภาพมาโชว์อย่างเดียว (0.1ms) ***
 	private: System::Void timer1_Tick(System::Object^ sender, System::EventArgs^ e) {
-		if (isBackgroundMode) return; // [NEW] Skip updating UI if in background
-
 		try {
 			cv::Mat finalFrame;
 			long long seq = 0;
@@ -1449,11 +1452,14 @@ private: System::Windows::Forms::Label^ label1;
 			lastDisplaySeq = seq;
 
 			if (!finalFrame.empty()) {
-				UpdatePictureBox(finalFrame);
-				// Check for violations (no need to clone, just read-only access)
+				// Only update picture box when NOT in background mode — saves CPU/GDI
+				if (!isBackgroundMode) {
+					UpdatePictureBox(finalFrame);
+				}
+				// Violation checks always run — needed for logging even in background mode
 				bool parkingEnabled = g_parkingEnabled_online.load();
 				if (parkingEnabled) {
-					CheckViolations_Online(finalFrame); // [FIX] Pass by reference, no clone
+					CheckViolations_Online(finalFrame);
 				}
 			}
 
@@ -1528,6 +1534,65 @@ private: System::Windows::Forms::Label^ label1;
 			}
 		}
 		catch (...) {}
+	}
+	// Called from ProcessingLoopHeadless to keep the web dashboard fed with parking stats
+	// This is needed because timer1_Tick (WinForms UI timer) may not fire in headless mode.
+	private: void UpdateWebStats() {
+		if (!g_mjpegServer_online) return;
+		OnlineAppState state;
+		{
+			std::lock_guard<std::mutex> lock(g_onlineStateMutex);
+			state = g_onlineState;
+		}
+		if (state.slotStatuses.empty()) return;
+
+		int emptyCount = 0, occupiedCount = 0, carEmpty = 0, carNormal = 0, motoEmpty = 0, motoNormal = 0;
+		for (const auto& slotEntry : state.slotStatuses) {
+			int slotId = slotEntry.first;
+			std::string type = "Car";
+			if (state.slotTypes.find(slotId) != state.slotTypes.end())
+				type = state.slotTypes.at(slotId);
+			if (slotEntry.second == SlotStatus::EMPTY) {
+				emptyCount++;
+				if (type == "Motorcycle") motoEmpty++; else carEmpty++;
+			} else {
+				occupiedCount++;
+				if (type == "Motorcycle") motoNormal++; else carNormal++;
+			}
+		}
+		int violationCount = (int)state.violatingCarIds.size();
+
+		std::string json = "{\"empty\":" + std::to_string(emptyCount) +
+		                   ",\"normal\":" + std::to_string(occupiedCount) +
+		                   ",\"carEmpty\":" + std::to_string(carEmpty) +
+		                   ",\"carNormal\":" + std::to_string(carNormal) +
+		                   ",\"motoEmpty\":" + std::to_string(motoEmpty) +
+		                   ",\"motoNormal\":" + std::to_string(motoNormal) +
+		                   ",\"violation\":" + std::to_string(violationCount) + ",\"logs\":[";
+		bool first = true;
+		for each (ViolationRecord_Online^ rec in violationsList_online) {
+			if (!first) json += ",";
+			System::String^ ts = rec->captureTime.ToString("HH:mm:ss");
+			System::String^ vt = rec->violationType;
+			std::string timeStr = msclr::interop::marshal_as<std::string>(ts);
+			std::string typeStr = msclr::interop::marshal_as<std::string>(vt);
+			json += "{\"id\":" + std::to_string(rec->carId) + ",\"time\":\"" + timeStr + "\",\"type\":\"" + typeStr + "\"}";
+			first = false;
+		}
+		json += "]}";
+		g_mjpegServer_online->SetStats(json);
+	}
+
+	// Called by web API disconnect — stops camera threads but keeps the web server running
+	public: void StopProcessingPublic() {
+		shouldStop = true;
+		isProcessing = false;
+		if (processingWorker->IsBusy) processingWorker->CancelAsync();
+		// NOTE: Do NOT delete g_mjpegServer_online here — it is owned by main.cpp global web server
+		// NOTE: Do NOT stop timer1 — logging still needs it for violation checks
+		// Stop video recording thread only
+		StopVideoRecordingThread_Online();
+		DumpLog("[DISCONNECT] Camera threads stopped. Web server and timer preserved.");
 	}
 	private: void StopProcessing() {
 		shouldStop = true;
@@ -1712,13 +1777,15 @@ private: void ProcessingLoopHeadless() {
 				DrawSceneOnline(frameToProcess, seq, renderedFrame);
 
 				if (!renderedFrame.empty()) {
-					std::lock_guard<std::mutex> lock(g_processedMutex_online);
-					g_processedFrame_online = renderedFrame;
-					g_processedSeq_online = seq;
-					g_processedFramesCount_online++;
+					{
+						std::lock_guard<std::mutex> lock(g_processedMutex_online);
+						g_processedFrame_online = renderedFrame;
+						g_processedSeq_online = seq;
+						g_processedFramesCount_online++;
+					}
 
 					if (g_mjpegServer_online) {
-						g_mjpegServer_online->SetLatestFrame(g_processedFrame_online);
+						g_mjpegServer_online->SetLatestFrame(renderedFrame);
 					}
 
 					cv::Mat scaledFrame;
@@ -1736,6 +1803,19 @@ private: void ProcessingLoopHeadless() {
 						std::lock_guard<std::mutex> vidLock(g_videoCurrentFrameMutex);
 						g_videoCurrentFrame = scaledFrame.clone();
 					}
+
+					// --- Violation Checking & Stats update (every 2 seconds) ---
+					// NOTE: We do this here instead of timer1_Tick because timer1
+					// is a WinForms UI timer that may not fire in headless web mode.
+					bool parkingEnabled = g_parkingEnabled_online.load();
+					if (parkingEnabled) {
+						// Use a local copy of the frame for violation checking to avoid data races
+						cv::Mat violFrame = renderedFrame.clone();
+						CheckViolations_Online(violFrame);
+					}
+
+					// Update stats JSON for the web dashboard (rate-limited by g_lastViolationCheck_online)
+					UpdateWebStats();
 				}
 
 				lastProcessedSeq = seq;
@@ -2220,6 +2300,7 @@ private: System::Void UploadForm_FormClosing(System::Object^ sender, FormClosing
 	// *** [NEW] VIOLATION ALERTS METHODS ***
 	private: void AddViolationRecord_Online(int carId, cv::Mat& frameCapture, System::String^ violationType, 
 									 cv::Mat fullFrame, cv::Rect carBox) {
+		DumpLog("[VIOLATION] AddViolationRecord_Online called! carId=" + std::to_string(carId) + " frameEmpty=" + std::string(frameCapture.empty() ? "yes" : "no") + " fullEmpty=" + std::string(fullFrame.empty() ? "yes" : "no"));
 		if (frameCapture.empty()) return;
 
 		Bitmap^ screenshot = gcnew Bitmap(frameCapture.cols, frameCapture.rows, System::Drawing::Imaging::PixelFormat::Format24bppRgb);
@@ -2365,14 +2446,17 @@ private: void CheckViolations_Online(cv::Mat& currentFrame) {
 			state = g_onlineState;
 		}
 
+		DumpLog("[VCHECK] state.cars=" + std::to_string(state.cars.size()) + " violating=" + std::to_string(state.violatingCarIds.size()) + " parkingEnabled=" + std::string(g_parkingEnabled_online.load() ? "yes" : "no"));
+
 		for each(auto car in state.cars) {
+			DumpLog("[VCHECK] car.id=" + std::to_string(car.id) + " framesStill=" + std::to_string(car.framesStill));
 			if (car.framesStill > 300) {
 				if (!violatingCarTimers_online->ContainsKey(car.id)) {
 					violatingCarTimers_online->Add(car.id, System::DateTime::Now);
 					
 					cv::Rect safeBbox = car.bbox & cv::Rect(0, 0, currentFrame.cols, currentFrame.rows);
 					if (safeBbox.area() > 0) {
-						cv::Mat croppedFrame = currentFrame(safeBbox).clone(); // [FIX] Clone only when capturing
+						cv::Mat croppedFrame = currentFrame(safeBbox).clone();
 						AddViolationRecord_Online(car.id, croppedFrame, L"Overstay", currentFrame, car.bbox);
 					}
 				}

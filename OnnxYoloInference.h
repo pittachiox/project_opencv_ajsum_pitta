@@ -4,6 +4,8 @@
 #include <string>
 #include <onnxruntime_cxx_api.h>
 
+__declspec(selectany) int g_selectedGpuId = 0;
+
 class OnnxYoloInference {
 public:
     OnnxYoloInference() : env_(ORT_LOGGING_LEVEL_WARNING, "YOLOInference") {}
@@ -12,23 +14,29 @@ public:
         session_.reset();
     }
     
-    bool loadModel(const std::string& modelPath, bool useGPU = true) {
+    bool loadModel(const std::string& modelPath, bool useGPU = true, int gpuDeviceId = 0) {
         try {
             Ort::SessionOptions session_options;
-            session_options.SetIntraOpNumThreads(4);
+            // [GPU EXTREME OPTIMIZATION] Limit CPU threads to force GPU reliance
+            session_options.SetIntraOpNumThreads(1);
+            session_options.SetInterOpNumThreads(1);
             session_options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
             
             if (useGPU) {
                 try {
                     // Try CUDA first
                     OrtCUDAProviderOptions cuda_options;
-                    cuda_options.device_id = 0;
+                    cuda_options.device_id = gpuDeviceId; // [NEW] User selectable GPU
+                    
+                    // [GPU EXTREME OPTIMIZATION] Force heavy use of cuDNN
                     cuda_options.cudnn_conv_algo_search = OrtCudnnConvAlgoSearchHeuristic;
-                    cuda_options.gpu_mem_limit = SIZE_MAX;
-                    cuda_options.arena_extend_strategy = 1;
+                    cuda_options.gpu_mem_limit = SIZE_MAX; // Take all available VRAM if needed
+                    cuda_options.arena_extend_strategy = 0; // 0 = kNextPowerOfTwo for better memory reuse
                     cuda_options.do_copy_in_default_stream = 1;
+                    cuda_options.has_user_compute_stream = 0;
+                    
                     session_options.AppendExecutionProvider_CUDA(cuda_options);
-                    OutputDebugStringA("[ONNX] CUDA provider added\n");
+                    OutputDebugStringA("[ONNX] CUDA provider added successfully with Extreme Optimization\n");
                 }
                 catch (...) {
                     OutputDebugStringA("[ONNX] CUDA provider failed, using CPU\n");

@@ -369,7 +369,10 @@
                     <div class="help-text">Example apps: IP Webcam, DroidCam. Devices must be on identical Local
                         Network.</div>
                 </div>
-                <button type="submit" class="btn-connect">Connect to Camera Stream</button>
+                <button type="submit" class="btn-connect" id="btnConnect">Connect to Camera Stream</button>
+                <button type="button" class="btn-connect" id="btnDisconnect"
+                    style="margin-top:8px; background: linear-gradient(135deg, #e53e3e, #c53030); display:none;"
+                    onclick="disconnectCamera()">⛔ Disconnect Camera</button>
             </form>
 
             <div style="margin-top: 24px; text-align: center; border-top: 1px solid #e2e8f0; padding-top: 20px;">
@@ -511,6 +514,9 @@
                                 appendLog('Camera connected successfully! Waiting for AI...', 'success');
                                 btnProceed.style.display = 'block';
                                 btnCancel.textContent = 'Close';
+                                // Show disconnect button now that we are connected
+                                document.getElementById('btnDisconnect').style.display = 'block';
+                                document.getElementById('btnConnect').textContent = 'Reconnect to Camera';
                             } else {
                                 rawPreviewImg.src = rawUrl;
                             }
@@ -574,6 +580,32 @@
             // Re-trigger the form submission
             document.getElementById('setupForm').dispatchEvent(new Event('submit'));
         });
+
+        // Disconnect camera function
+        function disconnectCamera() {
+            const btn = document.getElementById('btnDisconnect');
+            btn.textContent = '⏳ Disconnecting...';
+            btn.disabled = true;
+            fetch('/api/disconnect', { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'disconnected') {
+                        btn.textContent = '✓ Disconnected';
+                        btn.style.background = 'linear-gradient(135deg, #666, #444)';
+                        document.getElementById('btnConnect').textContent = 'Connect to Camera Stream';
+                        setTimeout(() => {
+                            btn.textContent = '⛔ Disconnect Camera';
+                            btn.style.background = 'linear-gradient(135deg, #e53e3e, #c53030)';
+                            btn.style.display = 'none';
+                            btn.disabled = false;
+                        }, 2000);
+                    } else {
+                        btn.textContent = '⛔ Disconnect Camera';
+                        btn.disabled = false;
+                    }
+                })
+                .catch(() => { btn.textContent = '⛔ Disconnect Camera'; btn.disabled = false; });
+        }
 
         // Handle Template Upload
         document.getElementById('fileInput').addEventListener('change', (e) => {
