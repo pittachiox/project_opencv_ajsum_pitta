@@ -297,6 +297,16 @@
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
         }
 
+        .btn-retry {
+            background: linear-gradient(135deg, #f39c12, #d35400);
+            display: none;
+        }
+
+        .btn-retry:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        }
+
         .btn-proceed {
             background: linear-gradient(135deg, #2ecc71, #27ae60);
             display: none;
@@ -400,6 +410,7 @@
 
             <div class="modal-actions">
                 <button type="button" class="modal-btn btn-cancel" id="btnCancel">Cancel</button>
+                <button type="button" class="modal-btn btn-retry" id="btnRetry">Retry</button>
                 <a href="/dashboard" class="modal-btn btn-proceed" id="btnProceed">Go to Dashboard →</a>
             </div>
         </div>
@@ -415,9 +426,10 @@
         const rawPreviewImg = document.getElementById('rawPreviewImg');
         const aiPreviewImg = document.getElementById('aiPreviewImg');
         const modalTitle = document.getElementById('modalTitle');
+        const btnRetry = document.getElementById('btnRetry');
         let pollInterval = null;
         let pollAttempts = 0;
-        const MAX_ATTEMPTS = 30; // 30 * 500ms = 15 seconds timeout
+        const MAX_ATTEMPTS = 10; // 10 * 500ms = 5 seconds timeout
         let rawConnected = false;
         let aiConnected = false;
 
@@ -447,6 +459,9 @@
             rawPreviewItem.style.display = 'none';
             aiPreviewItem.style.display = 'none';
             btnProceed.style.display = 'none';
+            btnRetry.style.display = 'none';
+            btnCancel.textContent = 'Cancel';
+            btnCancel.style.background = 'linear-gradient(135deg, #555, #333)';
             modalTitle.textContent = 'Connecting...';
             pollAttempts = 0;
             rawConnected = false;
@@ -514,13 +529,24 @@
                             }).catch(() => { });
 
                         } else if (res.status === 404 || res.status === 503) {
+                            // Show placeholder stream even while waiting
+                            if (!rawConnected) {
+                                rawPreviewImg.src = rawUrl;
+                                rawPreviewItem.style.display = 'flex';
+                            }
+
                             if (pollAttempts >= MAX_ATTEMPTS) {
                                 clearInterval(pollInterval);
-                                appendLog('Connection timed out after 15 seconds.', 'error');
+                                appendLog('Connection timed out after 5 seconds.', 'error');
                                 appendLog('Please verify the IP, port, and network stream path are correct. Check if the camera is online.', '');
                                 modalTitle.textContent = 'Timeout Error';
                                 const lastSpin = logBox.querySelector('.logs-spinner');
                                 if (lastSpin) lastSpin.remove();
+
+                                // Show explicit Retry and Cancel logic
+                                btnCancel.textContent = 'Cancel';
+                                btnCancel.style.background = 'linear-gradient(135deg, #555, #333)';
+                                btnRetry.style.display = 'block';
                             } else if (pollAttempts % 4 === 0) {
                                 appendLog('Still waiting for stream...', 'spin');
                             }
@@ -531,6 +557,9 @@
                             clearInterval(pollInterval);
                             appendLog('Connection timed out.', 'error');
                             modalTitle.textContent = 'Timeout Error';
+                            btnCancel.textContent = 'Cancel';
+                            btnCancel.style.background = 'linear-gradient(135deg, #555, #333)';
+                            btnRetry.style.display = 'block';
                         }
                     });
             }, 500); // Poll every 500ms
@@ -541,10 +570,19 @@
             if (pollInterval) clearInterval(pollInterval);
         });
 
+        btnRetry.addEventListener('click', () => {
+            // Re-trigger the form submission
+            document.getElementById('setupForm').dispatchEvent(new Event('submit'));
+        });
+
         // Handle Template Upload
         document.getElementById('fileInput').addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (!file) return;
+
+            const uploadBtn = document.querySelector('button[onclick*="fileInput"]');
+            uploadBtn.textContent = 'Uploading...';
+            uploadBtn.disabled = true;
 
             const reader = new FileReader();
             reader.onload = function (event) {
@@ -557,12 +595,23 @@
                     .then(res => res.json())
                     .then(data => {
                         if (data.status === 'success') {
+                            // Change button appearance to show success
+                            uploadBtn.textContent = '✓ Template Uploaded';
+                            uploadBtn.style.backgroundColor = '#16a34a'; // Green
+                            uploadBtn.style.borderColor = '#16a34a';
+                            uploadBtn.style.color = 'white';
+                            uploadBtn.disabled = false;
+
                             alert('Template uploaded successfully! You can now draw parking spaces using this template.');
                         } else {
+                            uploadBtn.textContent = 'Upload Parking Template (.xml)';
+                            uploadBtn.disabled = false;
                             alert('Error uploading template.');
                         }
                     })
                     .catch(err => {
+                        uploadBtn.textContent = 'Upload Parking Template (.xml)';
+                        uploadBtn.disabled = false;
                         alert('Network error while uploading template: ' + err.message);
                     });
             };
@@ -579,6 +628,10 @@
                 return;
             }
 
+            const pasteBtn = document.getElementById('btnPasteXml');
+            pasteBtn.textContent = 'Applying...';
+            pasteBtn.disabled = true;
+
             fetch('/api/save_template', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/xml' },
@@ -587,13 +640,24 @@
                 .then(res => res.json())
                 .then(data => {
                     if (data.status === 'success') {
+                        // Change button appearance to show success
+                        pasteBtn.textContent = '✓ Template Applied';
+                        pasteBtn.style.backgroundColor = '#16a34a'; // Green
+                        pasteBtn.style.borderColor = '#16a34a';
+                        pasteBtn.style.color = 'white';
+                        pasteBtn.disabled = false;
+
                         alert('Pasted template applied successfully! You can now draw parking spaces using this template.');
                         document.getElementById('xmlInput').value = ''; // clear upon success
                     } else {
+                        pasteBtn.textContent = 'Apply Raw XML';
+                        pasteBtn.disabled = false;
                         alert('Error applying template.');
                     }
                 })
                 .catch(err => {
+                    pasteBtn.textContent = 'Apply Raw XML';
+                    pasteBtn.disabled = false;
                     alert('Network error while applying template: ' + err.message);
                 });
         });

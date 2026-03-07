@@ -28,6 +28,7 @@ using json = nlohmann::json;
 #include <set>
 #include <chrono> // [PHASE 1] Add for future use
 #include <atomic> // [PHASE 1] Add for atomic operations
+#include "OnnxYoloInference.h" // [GPU] ONNX Runtime GPU acceleration
 
 // ==========================================
 //  LAYER 1: SHARED DATA
@@ -48,7 +49,8 @@ __declspec(selectany) std::mutex g_onlineStateMutex;
 //  LAYER 2: LOGIC & BACKEND
 // ==========================================
 
-__declspec(selectany) cv::dnn::Net* g_net = nullptr;
+__declspec(selectany) cv::dnn::Net* g_net = nullptr; // [DEPRECATED] Old OpenCV DNN
+__declspec(selectany) OnnxYoloInference* g_onnx_net = nullptr; // [GPU] New ONNX Runtime
 __declspec(selectany) std::vector<std::string> g_classes;
 __declspec(selectany) std::vector<cv::Scalar> g_colors;
 __declspec(selectany) BYTETracker* g_tracker = nullptr;
@@ -59,6 +61,7 @@ __declspec(selectany) cv::VideoCapture* g_cap = nullptr;
 __declspec(selectany) cv::Mat g_latestRawFrame;
 __declspec(selectany) long long g_frameSeq_online = 0;
 __declspec(selectany) std::mutex g_frameMutex;
+__declspec(selectany) std::atomic<int> g_connectionAttemptId_online(0); // [NEW] Prevent race conditions on multiple connect clicks
 __declspec(selectany) double g_cameraFPS = 30.0;
 
 __declspec(selectany) std::mutex g_aiMutex_online;
@@ -209,49 +212,83 @@ static void GetProcessedFrameOnline(cv::Mat& outFrame, long long& outSeq) {
 }
 
 static void OpenGlobalCamera(int cameraIndex = 0) {
-	std::lock_guard<std::mutex> lock(g_frameMutex);
-	if (g_cap) { delete g_cap; g_cap = nullptr; }
-	g_cap = new cv::VideoCapture(cameraIndex);
-	g_frameSeq_online = 0;
-	if (g_cap->isOpened()) {
-		g_cameraFPS = g_cap->get(cv::CAP_PROP_FPS);
-		if (g_cameraFPS <= 0) g_cameraFPS = 30.0;
+	cv::VideoCapture* temp_cap = new cv::VideoCapture(cameraIndex);
+	double temp_fps = 30.0;
+	if (temp_cap->isOpened()) {
+		temp_fps = temp_cap->get(cv::CAP_PROP_FPS);
+		if (temp_fps <= 0) temp_fps = 30.0;
 	}
+
+	{
+		std::lock_guard<std::mutex> lock(g_frameMutex);
+		if (g_cap) { delete g_cap; g_cap = nullptr; }
+		g_cap = temp_cap;
+		g_frameSeq_online = 0;
+		g_cameraFPS = temp_fps;
+	}
+
 	ResetParkingCache_Online();
 	
 	std::lock_guard<std::mutex> slock(g_onlineStateMutex);
 	g_onlineState = OnlineAppState();
 }
 
-static void OpenGlobalCameraFromIP(const std::string& rtspUrl) {
-	std::lock_guard<std::mutex> lock(g_frameMutex);
-	if (g_cap) { delete g_cap; g_cap = nullptr; }
+static void OpenGlobalCameraFromIP(const std::string& rtspUrl, int attemptId = -1) {
+	cv::VideoCapture* temp_cap = nullptr;
+	double temp_fps = 30.0;
 
 	bool isNetwork = rtspUrl.find("http://") == 0 || rtspUrl.find("rtsp://") == 0 || rtspUrl.find("https://") == 0;
 	if (isNetwork) {
-		DumpLog("[OPENCV] Opening network stream (Auto Backend): " + rtspUrl);
-		g_cap = new cv::VideoCapture(rtspUrl);
-        if (!g_cap->isOpened()) {
-            DumpLog("[OPENCV] Auto Backend failed. Trying CAP_FFMPEG explicitly...");
-            delete g_cap;
-            g_cap = new cv::VideoCapture(rtspUrl, cv::CAP_FFMPEG);
+		DumpLog("[OPENCV] Opening network stream with timeout (Auto Backend): " + rtspUrl);
+		temp_cap = new cv::VideoCapture();
+		
+		// [FIX] Set connection timeout to prevent hanging (5 seconds)
+		temp_cap->set(cv::CAP_PROP_OPEN_TIMEOUT_MSEC, 5000); // 5 second timeout
+		
+		bool opened = temp_cap->open(rtspUrl);
+		
+		if (attemptId != -1 && attemptId != g_connectionAttemptId_online.load()) {
+			delete temp_cap; return;
+		}
+
+        if (!opened || !temp_cap->isOpened()) {
+            DumpLog("[OPENCV] Auto Backend failed or timeout. Trying CAP_FFMPEG explicitly...");
+            delete temp_cap;
+            
+            if (attemptId != -1 && attemptId != g_connectionAttemptId_online.load()) return;
+            
+            temp_cap = new cv::VideoCapture();
+			temp_cap->set(cv::CAP_PROP_OPEN_TIMEOUT_MSEC, 5000);
+            temp_cap->open(rtspUrl, cv::CAP_FFMPEG);
         }
 	} else {
 		DumpLog("[OPENCV] Opening local stream: " + rtspUrl);
-		g_cap = new cv::VideoCapture(rtspUrl);
+		temp_cap = new cv::VideoCapture(rtspUrl);
 	}
 	
+	if (attemptId != -1 && attemptId != g_connectionAttemptId_online.load()) {
+		if (temp_cap) delete temp_cap;
+		return;
+	}
+
 	// [FIX] Network stream optimization
-	if (g_cap->isOpened()) {
-		DumpLog("[OPENCV] Stream opened successfully! Backend API used: " + std::to_string(g_cap->getBackendName().length() > 0 ? 1 : 0) + " (" + g_cap->getBackendName() + ")");
-		g_cap->set(cv::CAP_PROP_BUFFERSIZE, NETWORK_BUFFER_SIZE); // Reduce latency
-		g_cameraFPS = g_cap->get(cv::CAP_PROP_FPS);
-		if (g_cameraFPS <= 0) g_cameraFPS = 30.0;
+	if (temp_cap && temp_cap->isOpened()) {
+		DumpLog("[OPENCV] Stream opened successfully! Backend API used: " + std::to_string(temp_cap->getBackendName().length() > 0 ? 1 : 0) + " (" + temp_cap->getBackendName() + ")");
+		temp_cap->set(cv::CAP_PROP_BUFFERSIZE, NETWORK_BUFFER_SIZE); // Reduce latency
+		temp_fps = temp_cap->get(cv::CAP_PROP_FPS);
+		if (temp_fps <= 0) temp_fps = 30.0;
 	} else {
-		DumpLog("[OPENCV ERROR] Failed to open stream: " + rtspUrl);
+		DumpLog("[OPENCV ERROR] Failed to open stream (connection timeout or invalid URL): " + rtspUrl);
 	}
 	
-	g_frameSeq_online = 0;
+	{
+		std::lock_guard<std::mutex> lock(g_frameMutex);
+		if (g_cap) { delete g_cap; g_cap = nullptr; }
+		g_cap = temp_cap;
+		g_frameSeq_online = 0;
+		g_cameraFPS = temp_fps;
+	}
+
 	ResetParkingCache_Online();
 	
 	std::lock_guard<std::mutex> slock(g_onlineStateMutex);
@@ -262,15 +299,22 @@ static void InitGlobalModel(const std::string& modelPath) {
 	std::lock_guard<std::mutex> lock(g_aiMutex_online);
 	g_modelReady = false;
 	if (g_net) { delete g_net; g_net = nullptr; }
+	if (g_onnx_net) { delete g_onnx_net; g_onnx_net = nullptr; }
 	if (g_tracker) { delete g_tracker; g_tracker = nullptr; }
 
 	try {
-		g_net = new cv::dnn::Net(cv::dnn::readNetFromONNX(modelPath));
-		g_net->setPreferableBackend(cv::dnn::DNN_BACKEND_OPENCV);
-		g_net->setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
+		// Use ONNX Runtime with GPU acceleration
+		g_onnx_net = new OnnxYoloInference();
+		if (!g_onnx_net->loadModel(modelPath, true)) { // true = use GPU
+			delete g_onnx_net;
+			g_onnx_net = nullptr;
+			OutputDebugStringA("[ERROR] Failed to load ONNX model with GPU\n");
+			return;
+		}
+		
 		g_tracker = new BYTETracker(90, 0.25f);
 		
-		OutputDebugStringA("[INFO] Online mode with improved ByteTrack (90 frames tolerance)\n");
+		OutputDebugStringA("[INFO] Online mode with ONNX Runtime GPU + ByteTrack (90 frames tolerance)\n");
 
 		g_classes = {
 			"bicycle", "car", "motorcycle", "bus", "train", "truck"
@@ -283,6 +327,7 @@ static void InitGlobalModel(const std::string& modelPath) {
 		g_modelReady = true;
 	}
 	catch (...) {
+		if (g_onnx_net) { delete g_onnx_net; g_onnx_net = nullptr; }
 		if (g_tracker) { delete g_tracker; g_tracker = nullptr; }
 	}
 }
@@ -326,7 +371,7 @@ static cv::Mat CreateViolationVisualization(cv::Mat fullFrame, cv::Rect carBox) 
 static void ProcessFrameOnline(const cv::Mat& inputFrame, long long frameSeq) {
 	{
 		std::lock_guard<std::mutex> lock(g_aiMutex_online);
-		if (inputFrame.empty() || !g_net || !g_modelReady || !g_tracker) return;
+		if (inputFrame.empty() || !g_onnx_net || !g_modelReady || !g_tracker) return;
 	}
 
 	try {
@@ -341,8 +386,7 @@ static void ProcessFrameOnline(const cv::Mat& inputFrame, long long frameSeq) {
 		std::vector<cv::Mat> outputs;
 		{
 			std::lock_guard<std::mutex> lock(g_aiMutex_online);
-			g_net->setInput(blob);
-			g_net->forward(outputs, g_net->getUnconnectedOutLayersNames());
+			if (!g_onnx_net->forward(blob, outputs)) return; // [GPU] ONNX Runtime inference
 		}
 
 		if (outputs.empty() || outputs[0].empty()) return;
@@ -370,26 +414,60 @@ static void ProcessFrameOnline(const cv::Mat& inputFrame, long long frameSeq) {
 		std::vector<float> confs;
 		std::vector<cv::Rect> boxes;
 
-		for (int i = 0; i < rows; i++) {
-			float* classes_scores = data + 4;
-			if (dimensions >= 4 + (int)g_classes.size()) {
-				cv::Mat scores(1, (int)g_classes.size(), CV_32FC1, classes_scores);
-				cv::Point class_id;
-				double max_class_score;
-				cv::minMaxLoc(scores, 0, &max_class_score, 0, &class_id);
+		// Check output format: yolo26s uses [x1, y1, x2, y2, conf, class] (6 cols)
+		bool is_yolo26s_format = (dimensions == 6);
 
-				if (max_class_score > CONF_THRESHOLD && class_id.x == 2) {
-					float x = data[0]; float y = data[1]; float w = data[2]; float h = data[3];
-					float left = (x - 0.5 * w - dw) / ratio;
-					float top = (y - 0.5 * h - dh) / ratio;
-					float width = w / ratio;
-					float height = h / ratio;
-				 boxes.push_back(cv::Rect((int)left, (int)top, (int)width, (int)height));
-					confs.push_back((float)max_class_score);
-					class_ids.push_back(class_id.x);
+		for (int i = 0; i < rows; i++) {
+			if (is_yolo26s_format) {
+				// yolo26s format: [x1, y1, x2, y2, conf, class]
+				float x1_lb = data[0];
+				float y1_lb = data[1];
+				float x2_lb = data[2];
+				float y2_lb = data[3];
+				float conf = data[4];
+				int cls = (int)data[5];
+
+				// Filter by confidence and class (car = class 2)
+				if (conf > CONF_THRESHOLD && cls == 2) {
+					// Convert from letterbox coordinates to original image coordinates
+					float left = (x1_lb - dw) / ratio;
+					float top = (y1_lb - dh) / ratio;
+					float right = (x2_lb - dw) / ratio;
+					float bottom = (y2_lb - dh) / ratio;
+
+					float width = right - left;
+					float height = bottom - top;
+
+					// Sanity check
+					if (width > 0 && height > 0) {
+						boxes.push_back(cv::Rect((int)left, (int)top, (int)width, (int)height));
+						confs.push_back(conf);
+						class_ids.push_back(cls);
+					}
 				}
 			}
-		 data += dimensions;
+			else {
+				// Standard YOLO format: [x_center, y_center, w, h, ...classes...]
+				float* classes_scores = data + 4;
+				if (dimensions >= 4 + (int)g_classes.size()) {
+					cv::Mat scores(1, (int)g_classes.size(), CV_32FC1, classes_scores);
+					cv::Point class_id;
+					double max_class_score;
+					cv::minMaxLoc(scores, 0, &max_class_score, 0, &class_id);
+
+					if (max_class_score > CONF_THRESHOLD && class_id.x == 2) {
+						float x = data[0]; float y = data[1]; float w = data[2]; float h = data[3];
+						float left = (x - 0.5 * w - dw) / ratio;
+						float top = (y - 0.5 * h - dh) / ratio;
+						float width = w / ratio;
+						float height = h / ratio;
+						boxes.push_back(cv::Rect((int)left, (int)top, (int)width, (int)height));
+						confs.push_back((float)max_class_score);
+						class_ids.push_back(class_id.x);
+					}
+				}
+			}
+			data += dimensions;
 		}
 
 		std::vector<int> nms;
@@ -775,6 +853,8 @@ namespace ConsoleApplication3 {
 		}
 
 	public: bool StartCameraHeadless(String^ ip, String^ port, String^ path) {
+		int currentAttemptId = ++g_connectionAttemptId_online;
+		
 		if (!path->StartsWith("/")) {
 			path = "/" + path;
 		}
@@ -787,25 +867,33 @@ namespace ConsoleApplication3 {
 
 		bool connected = false;
 		for each (String^ streamUrl in urlFormats) {
+			if (currentAttemptId != g_connectionAttemptId_online.load()) {
+				DumpLog("[INFO] Aborting previous connection attempt because a new one started.");
+				return false;
+			}
+			
 			std::string url = msclr::interop::marshal_as<std::string>(streamUrl);
 			DumpLog("[INFO] Headless trying to connect: " + url);
 			
-			OpenGlobalCameraFromIP(url);
+			// [FIX] Use attempt ID to allow early abort
+			OpenGlobalCameraFromIP(url, currentAttemptId);
 			
-			// Wait up to 5 seconds for OpenCV to open the stream
-			for (int w = 0; w < 10; ++w) {
-				if (g_cap && g_cap->isOpened()) break;
-				Threading::Thread::Sleep(500);
+			for(int i = 0; i < 5; i++) {
+				if (currentAttemptId != g_connectionAttemptId_online.load()) return false;
+				Threading::Thread::Sleep(100);
 			}
 
 			if (g_cap && g_cap->isOpened()) {
 				cv::Mat testFrame;
 				bool canRead = false;
-				// Wait up to 3 seconds (30 * 100ms) for first frame
-				for (int i = 0; i < 30; ++i) {
+				for (int i = 0; i < 10; ++i) {
+					if (currentAttemptId != g_connectionAttemptId_online.load()) {
+						// Abort! Another thread will clean up g_cap if needed, or it's holding valid stream.
+						return false;
+					}
 					{
 						std::lock_guard<std::mutex> lock(g_frameMutex);
-						if (g_cap->read(testFrame) && !testFrame.empty()) { 
+						if (g_cap && g_cap->read(testFrame) && !testFrame.empty()) { 
                             canRead = true; 
                             g_latestRawFrame = testFrame.clone();
                             g_frameSeq_online++;
@@ -819,7 +907,7 @@ namespace ConsoleApplication3 {
 					Threading::Thread::Sleep(100);
 				}
 				if (!connected) {
-					DumpLog("[WARNING] Camera opened but failed to read first frame after 3 seconds.");
+					DumpLog("[WARNING] Camera opened but failed to read first frame after 1 second.");
 				}
 				if (connected) break;
 			}
@@ -835,7 +923,7 @@ namespace ConsoleApplication3 {
 			StartProcessing();
 			return true;
 		} else {
-			DumpLog("[ERROR] Headless could not connect to camera.");
+			DumpLog("[ERROR] Headless could not connect to camera (timeout or invalid IP).");
 			return false;
 		}
 	}
@@ -1580,19 +1668,10 @@ private: System::Windows::Forms::Label^ label1;
 	}
 
 	private: void CameraReaderLoop() {
-		double ticksPerFrame = 1000.0 / 30.0;
-		if (g_cameraFPS > 0) ticksPerFrame = 1000.0 / g_cameraFPS;
-
-		long long nextTick = cv::getTickCount();
-		double tickFreq = cv::getTickFrequency();
+		// [GPU ACCELERATION] Remove FPS throttling - process as fast as GPU can handle!
+		// Camera will naturally limit to its own FPS (e.g., 30 FPS), but GPU processing is now uncapped
 
 		while (!shouldStop) {
-			long long currentTick = cv::getTickCount();
-			if (currentTick < nextTick) {
-				Threading::Thread::Sleep(1);
-				continue;
-			}
-
 			cv::Mat tempFrame;
 			bool success = false;
 
@@ -1653,8 +1732,7 @@ private: System::Windows::Forms::Label^ label1;
                         }
                     }
 
-                    nextTick += (long long)(ticksPerFrame * tickFreq / 1000.0);
-                    if (cv::getTickCount() > nextTick) nextTick = cv::getTickCount();
+                    // [GPU] No artificial delay - process next frame immediately!
                 } else {
                     // [FIX] Don't break immediately, might be temporary network hiccup
 					Threading::Thread::Sleep(50);
@@ -1818,19 +1896,23 @@ btnCancel->DialogResult = System::Windows::Forms::DialogResult::Cancel;
 				String::Format("rtsp://{0}:{1}", ip, port)
 			};
 
-			this->Text = L"Online Mode - Connecting to camera...";
-			Application::DoEvents();
-
 			bool connected = false;
 			String^ successUrl = "";
+			int attemptNum = 0;
 
 			for each (String^ streamUrl in urlFormats) {
+				attemptNum++;
+				this->Text = String::Format("Connecting... ({0}/4) - {1}", attemptNum, streamUrl);
+				Application::DoEvents();
+				
 				std::string url = msclr::interop::marshal_as<std::string>(streamUrl);
 				
 				OutputDebugStringA(("[INFO] Trying to connect: " + url + "\n").c_str());
 				
 				OpenGlobalCameraFromIP(url);
-				Threading::Thread::Sleep(1000);
+				
+				// [FIX] Reduced wait time from 1000ms to 500ms (timeout is already 5s in OpenGlobalCameraFromIP)
+				Threading::Thread::Sleep(500);
 
 				if (g_cap && g_cap->isOpened()) {
 					cv::Mat testFrame;
@@ -1872,11 +1954,23 @@ btnCancel->DialogResult = System::Windows::Forms::DialogResult::Cancel;
 				);
 			}
 			else {
-				this->Text = L"Online Mode - Connection Failed";
+				// [FIX] Clean up state after failed connection to allow retry
+				StopProcessing();
 				
-				String^ errorMsg = "Failed to connect to mobile camera!\n\n";
+				// Reset global camera state
+				{
+					std::lock_guard<std::mutex> lock(g_frameMutex);
+					if (g_cap) {
+						delete g_cap;
+						g_cap = nullptr;
+					}
+				}
+				
+				this->Text = L"Online Mode - Connection Failed (Ready to Retry)";
+				
+				String^ errorMsg = "❌ Failed to connect to mobile camera!\n\n";
 				errorMsg += "Troubleshooting Steps:\n";
-				errorMsg += "1. Verify IP Address: " + ip + "\n";
+				errorMsg += "1. Check IP Address: " + ip + " (is it correct?)\n";
 				errorMsg += "2. Verify Port: " + port + "\n";
 				errorMsg += "3. Check if camera app is running on mobile\n";
 				errorMsg += "4. Ensure both devices are on the same WiFi network\n";
@@ -1886,6 +1980,7 @@ btnCancel->DialogResult = System::Windows::Forms::DialogResult::Cancel;
 				for each (String^ url in urlFormats) {
 					errorMsg += "  - " + url + "\n";
 				}
+				errorMsg += "\n✅ You can try connecting again with a different IP/Port.";
 				
 				MessageBox::Show(
 					errorMsg,
@@ -1893,18 +1988,38 @@ btnCancel->DialogResult = System::Windows::Forms::DialogResult::Cancel;
 					MessageBoxButtons::OK,
 					MessageBoxIcon::Error
 				);
+				
+				// Re-enable button for retry
+				if (btnLiveCamera) btnLiveCamera->Enabled = true;
 			}
 		}
 		catch (Exception^ ex) {
-			this->Text = L"Online Mode - Error Occurred";
+			// [FIX] Clean up state after exception to allow retry
+			StopProcessing();
+			
+			// Reset global camera state
+			{
+				std::lock_guard<std::mutex> lock(g_frameMutex);
+				if (g_cap) {
+					delete g_cap;
+					g_cap = nullptr;
+				}
+			}
+			
+			this->Text = L"Online Mode - Error Occurred (Ready to Retry)";
+			
 			MessageBox::Show(
-				"An error occurred while connecting:\n\n" + 
+				"❌ An error occurred while connecting:\n\n" + 
 				ex->Message + "\n\n" +
-				"Stack Trace:\n" + ex->StackTrace,
+				"Stack Trace:\n" + ex->StackTrace + "\n\n" +
+				"✅ You can try connecting again.",
 				"Exception Error",
 				MessageBoxButtons::OK,
 				MessageBoxIcon::Error
 			);
+			
+			// Re-enable button for retry
+			if (btnLiveCamera) btnLiveCamera->Enabled = true;
 		}
 	}
 }
@@ -1925,6 +2040,11 @@ private: System::Void btnLoadParkingTemplate_Click(System::Object^ sender, Syste
 		std::string fileName = msclr::interop::marshal_as<std::string>(ofd->FileName);
 		if (LoadParkingTemplate_Online(fileName)) {
 			chkParkingMode->Checked = true;
+			
+			// [UI FIX] Change button color to indicate template is loaded
+			btnLoadParkingTemplate->BackColor = System::Drawing::Color::DarkGreen;
+			btnLoadParkingTemplate->ForeColor = System::Drawing::Color::White;
+			btnLoadParkingTemplate->Text = L"✓ Template Loaded";
 			
 			// [UI FIX] Enable Live Camera button after successful template load
 			btnLiveCamera->Enabled = true;

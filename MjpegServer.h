@@ -433,15 +433,17 @@ private:
             return;
         }
         cv::Mat frame = onGetFrame();
-        if (frame.empty()) {
+        bool isEmpty = frame.empty();
+        if (isEmpty) {
             frame = cv::Mat(480, 640, CV_8UC3, cv::Scalar(50, 50, 50));
             cv::putText(frame, "Waiting for AI Processing...", cv::Point(80, 240), cv::FONT_HERSHEY_SIMPLEX, 1, cv::Scalar(255, 255, 255), 2);
         }
 
+        std::string statusLine = isEmpty ? "HTTP/1.1 503 Service Unavailable\r\n" : "HTTP/1.1 200 OK\r\n";
         std::vector<uchar> buf;
         std::vector<int> params = { cv::IMWRITE_JPEG_QUALITY, 80 };
         cv::imencode(".jpg", frame, buf, params);
-        std::string response = "HTTP/1.1 200 OK\r\n"
+        std::string response = statusLine +
                                "Content-Type: image/jpeg\r\n"
                                "Content-Length: " + std::to_string(buf.size()) + "\r\n"
                                "Cache-Control: no-cache\r\n"
@@ -459,15 +461,17 @@ private:
             return;
         }
         cv::Mat frame = onGetRawFrame();
-        if (frame.empty()) {
+        bool isEmpty = frame.empty();
+        if (isEmpty) {
             frame = cv::Mat(480, 640, CV_8UC3, cv::Scalar(50, 50, 50));
             cv::putText(frame, "Waiting for stream...", cv::Point(150, 240), cv::FONT_HERSHEY_SIMPLEX, 1, cv::Scalar(255, 255, 255), 2);
         }
 
+        std::string statusLine = isEmpty ? "HTTP/1.1 503 Service Unavailable\r\n" : "HTTP/1.1 200 OK\r\n";
         std::vector<uchar> buf;
         std::vector<int> params = { cv::IMWRITE_JPEG_QUALITY, 80 };
         cv::imencode(".jpg", frame, buf, params);
-        std::string response = "HTTP/1.1 200 OK\r\n"
+        std::string response = statusLine +
                                "Content-Type: image/jpeg\r\n"
                                "Content-Length: " + std::to_string(buf.size()) + "\r\n"
                                "Cache-Control: no-cache\r\n"

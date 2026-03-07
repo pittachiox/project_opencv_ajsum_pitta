@@ -34,10 +34,55 @@ bld/
 [Ll]ogs/
 
 # ==========================================
-# [CUSTOM] Parking Templates Folder & Debug
+# [CUSTOM] Project-Specific Ignores
 # ==========================================
+
+# Parking Templates (user-generated XML files)
 parking_templates/
 debug_parking.txt
+
+# CUDA/GPU Installation Files (HUGE - don't push!)
+cuda_*.exe
+cudnn-*.zip
+onnxruntime-*.zip
+onnxruntime-win-*/
+install_cuda.ps1
+add_cudnn_to_path.ps1
+CUDA_INSTALL_GUIDE.txt
+
+# YOLO Model Files (large .onnx files)
+models/*.onnx
+!models/.gitkeep
+
+# Python Test/Demo Scripts
+test_*.py
+test_*.cpp
+test_*.jpg
+demo_*.py
+benchmark_*.py
+check_*.py
+
+# Backup Files
+*.backup
+*.bak
+
+# Test Output Folders
+TestYOLO/
+ConsoleA.ABDB059B/
+
+# Temporary Analysis Documents (keep only final guides)
+BOTTLENECK_DETAILED_ANALYSIS.md
+COMPLETE_REALITY_CHECK.md
+OPTIMIZATION_ANALYSIS.md
+REALITY_CHECK_SUMMARY.md
+STATUS_DASHBOARD.md
+OFFLINE_MODE_REFACTORING.md
+BUILD_TEST.md
+
+# Video/Image Test Files
+*.mp4
+*.avi
+*.mkv
 
 # Visual Studio 2015/2017 cache/options directory
 .vs/
