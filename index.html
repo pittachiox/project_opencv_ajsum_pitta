@@ -247,117 +247,132 @@
         </div>
     </div>
 
-    <div class="dashboard">
-        <!-- Video Stream Player -->
-        <div class="video-section">
-            <div class="video-container">
-                <img src="/video" alt="MJPEG Stream" id="streamImage" onerror="handleStreamError()">
-            </div>
-            <div style="margin-top: 15px; color: var(--text-muted); font-size: 12px; text-align: center;">
-                Feed updates in real-time. API Poll Rate: 1000ms.
-            </div>
-        </div>
-
-        <!-- Sidebar Stats & Logs -->
-        <div class="sidebar">
-            <div class="stats-grid">
-                <div class="stat-card stat-empty">
-                    <div class="stat-title">Empty Slots (Available)</div>
-                    <div class="stat-value" id="val-empty">0</div>
-                    <div
-                        style="display: flex; justify-content: space-around; margin-top: 10px; font-size: 14px; color: var(--text-muted);">
-                        <div>🚗 Car: <b id="val-car-empty" style="color: var(--empty-color);">0</b></div>
-                        <div>🏍️ Moto: <b id="val-moto-empty" style="color: var(--empty-color);">0</b></div>
-                    </div>
-                </div>
-                <div class="stat-card stat-normal">
-                    <div class="stat-title">Normally Occupied</div>
-                    <div class="stat-value" id="val-normal">0</div>
-                    <div
-                        style="display: flex; justify-content: space-around; margin-top: 10px; font-size: 14px; color: var(--text-muted);">
-                        <div>🚗 Car: <b id="val-car-normal" style="color: var(--normal-color);">0</b></div>
-                        <div>🏍️ Moto: <b id="val-moto-normal" style="color: var(--normal-color);">0</b></div>
-                    </div>
-                </div>
-                <div class="stat-card stat-violation">
-                    <div class="stat-title">Violations</div>
-                    <div class="stat-value" id="val-violation">0</div>
-                </div>
-            </div>
-
-            <div class="logs-section">
-                <h2>Recent Violations (Logs)</h2>
-                <div class="logs-container" id="logs-list">
-                    <!-- Logs injected via JS -->
-                    <div class="log-item" style="border-left-color: #555;">
-                        <span class="log-content">Waiting for data...</span>
-                    </div>
-                </div>
-            </div>
-        </div>
+    <div class="dashboard" id="cameras-container">
+        <!-- Dynamic Camera Streams will be injected here -->
+        <div style="color: #aaa; padding: 20px; width: 100%; text-align: center;">Loading cameras...</div>
     </div>
 
     <script>
-        function handleStreamError() {
-            document.getElementById('conn-status').textContent = 'Offline';
-            document.getElementById('conn-status').style.backgroundColor = 'var(--violation-color)';
-        }
+        let camerasData = [];
+        let pollingInterval = null;
 
-        async function fetchStats() {
+        async function initCameras() {
             try {
-                // Prevent aggressive browser caching of the GET request
-                const response = await fetch('/api/stats?t=' + new Date().getTime());
-                if (!response.ok) throw new Error('Network response was not ok');
-
+                const response = await fetch('/api/cameras?t=' + new Date().getTime());
+                if (!response.ok) throw new Error('Network error');
                 const data = await response.json();
-                console.log('Fetched data:', data); // [DEBUG] Print to browser console
 
-                // Update stats
-                document.getElementById('val-empty').innerText = data.empty || 0;
-                document.getElementById('val-car-empty').innerText = data.carEmpty || 0;
-                document.getElementById('val-moto-empty').innerText = data.motoEmpty || 0;
-
-                document.getElementById('val-normal').innerText = data.normal || 0;
-                document.getElementById('val-car-normal').innerText = data.carNormal || 0;
-                document.getElementById('val-moto-normal').innerText = data.motoNormal || 0;
-
-                document.getElementById('val-violation').innerText = data.violation || 0;
-
-                // Update logs
-                const logsList = document.getElementById('logs-list');
-
-                if (data.logs && data.logs.length > 0) {
-                    let html = '';
-                    // Assuming logs look like { id: 1, type: "Wrong Slot", time: "12:00" }
-                    data.logs.slice().reverse().forEach(log => {
-                        html += `
-                            <div class="log-item">
-                                <span class="log-time">${log.time}</span>
-                                <span class="log-content">Car ID: <strong>#${log.id}</strong> - ${log.type}</span>
-                            </div>
-                        `;
-                    });
-
-                    // Assign directly. Browsers normalize innerHTML, making strict string comparison unreliable.
-                    logsList.innerHTML = html;
+                if (Array.isArray(data) && data.length > 0) {
+                    camerasData = data;
+                    renderCameraGrid();
+                    if (pollingInterval) clearInterval(pollingInterval);
+                    pollingInterval = setInterval(fetchAllStats, 1000);
+                    fetchAllStats();
                 } else {
-                    logsList.innerHTML = `
-                        <div class="log-item" style="border-left-color: #28a745;">
-                            <span class="log-time">Now</span>
-                            <span class="log-content">No active violations. All clear!</span>
+                    document.getElementById('cameras-container').innerHTML = `
+                        <div style="color: #aaa; padding: 20px; width: 100%; text-align: center;">
+                            No cameras configured. Go to <a href="/setup_online" style="color:#ffc107;">Setup</a> to add a camera.
                         </div>
                     `;
                 }
-
-            } catch (error) {
-                console.error('Error fetching stats:', error);
+            } catch (err) {
+                console.error("Failed to load cameras", err);
             }
         }
 
-        // Poll stats every 1 second
-        setInterval(fetchStats, 1000);
-        // Initial fetch
-        fetchStats();
+        function renderCameraGrid() {
+            const container = document.getElementById('cameras-container');
+            container.innerHTML = ''; // Clear
+
+            camerasData.forEach(cam => {
+                const camId = cam.id;
+                const camName = cam.name || `Camera ${camId}`;
+
+                const html = `
+                <div class="video-section" id="cam-section-${camId}" style="flex: 1; min-width: 45%; max-width: 100%;">
+                    <h3 style="margin-top:0; margin-bottom:10px; border-bottom: 1px solid #333; padding-bottom: 5px;">
+                        <span style="color:#28a745" id="cam-status-${camId}">●</span> ${camName} (ID: ${camId})
+                    </h3>
+                    
+                    <div class="video-container" style="aspect-ratio: 16/9; background: #000; border-radius: 8px; overflow: hidden;">
+                        <img src="/${camId}/video" alt="MJPEG Stream ${camId}" 
+                             id="streamImage-${camId}" 
+                             style="width: 100%; height: 100%; object-fit: contain;"
+                             onerror="handleStreamError(${camId})">
+                    </div>
+                    
+                    <div style="display: flex; gap: 10px; margin-top: 15px;">
+                        <!-- Stats Mini Grid -->
+                        <div style="flex: 1; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+                            <div class="stat-card stat-empty" style="padding: 10px;">
+                                <div class="stat-title" style="font-size:10px;">Empty</div>
+                                <div class="stat-value" id="val-empty-${camId}" style="font-size:20px;">0</div>
+                            </div>
+                            <div class="stat-card stat-normal" style="padding: 10px;">
+                                <div class="stat-title" style="font-size:10px;">Normal</div>
+                                <div class="stat-value" id="val-normal-${camId}" style="font-size:20px;">0</div>
+                            </div>
+                            <div class="stat-card stat-violation" style="padding: 10px;">
+                                <div class="stat-title" style="font-size:10px;">Violation</div>
+                                <div class="stat-value" id="val-violation-${camId}" style="font-size:20px;">0</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Logs Mini Panel -->
+                        <div class="logs-section" style="flex: 1; padding: 10px; margin-top: 0; max-height: 120px;">
+                            <div class="logs-container" id="logs-list-${camId}">
+                                <div style="font-size:12px; color:#aaa;">Waiting for logs...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                `;
+                container.innerHTML += html;
+            });
+        }
+
+        function handleStreamError(camId) {
+            const statusIndicator = document.getElementById(`cam-status-${camId}`);
+            if (statusIndicator) {
+                statusIndicator.style.color = 'var(--violation-color)';
+            }
+        }
+
+        async function fetchAllStats() {
+            camerasData.forEach(async (cam) => {
+                try {
+                    const response = await fetch(`/api/${cam.id}/stats?t=` + new Date().getTime());
+                    if (!response.ok) return;
+
+                    const data = await response.json();
+
+                    document.getElementById(`val-empty-${cam.id}`).innerText = data.empty || 0;
+                    document.getElementById(`val-normal-${cam.id}`).innerText = data.normal || 0;
+                    document.getElementById(`val-violation-${cam.id}`).innerText = data.violation || 0;
+
+                    const logsList = document.getElementById(`logs-list-${cam.id}`);
+                    if (data.logs && data.logs.length > 0) {
+                        let html = '';
+                        data.logs.slice().reverse().forEach(log => {
+                            html += `
+                                <div style="font-size:12px; margin-bottom: 4px; padding-bottom: 4px; border-bottom: 1px solid #333;">
+                                    <span style="color:#aaa;">${log.time}</span> 
+                                    <span style="color:#ff6b6b;">#${log.id}</span> - ${log.type}
+                                </div>
+                            `;
+                        });
+                        logsList.innerHTML = html;
+                    } else {
+                        logsList.innerHTML = `<div style="font-size:12px; color:#28a745;">No active violations. All clear!</div>`;
+                    }
+                } catch (error) {
+                    // console.error(\`Stats error for cam \${cam.id}:\`, error);
+                }
+            });
+        }
+
+        // Initialize multiple cameras layout
+        document.addEventListener('DOMContentLoaded', initCameras);
     </script>
 </body>
 

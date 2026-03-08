@@ -49,7 +49,7 @@ struct TrackedObject {
         
         // [NEW] ?????? framesStill
         cv::Point currentCenter(newBbox.x + newBbox.width/2, newBbox.y + newBbox.height/2);
-        float distance = cv::norm(currentCenter - lastCenter);
+        float distance = (float)cv::norm(currentCenter - lastCenter);
         
         // ????????????????????? 5 pixels = ??????????
         if (distance < 5.0f) {

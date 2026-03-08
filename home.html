@@ -135,6 +135,76 @@
         .server-info b {
             color: #4ade80;
         }
+
+        /* Camera Dashboard Layout */
+        .camera-dashboard {
+            width: 100%;
+            max-width: 800px;
+            background: #1e1e1e;
+            border: 1px solid #333;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            margin-top: 10px;
+        }
+
+        .camera-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+            font-size: 14px;
+            background: #2a2a2a;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .camera-table th,
+        .camera-table td {
+            text-align: left;
+            padding: 12px 16px;
+            border-bottom: 1px solid #444;
+        }
+
+        .camera-table th {
+            background: #333;
+            color: #aaa;
+            font-weight: 600;
+        }
+
+        .camera-table tr:hover {
+            background: #303030;
+        }
+
+        .btn-small {
+            padding: 8px 16px;
+            font-size: 13px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            border: none;
+            color: white;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-add {
+            background: #27ae60;
+        }
+
+        .btn-setup {
+            background: #3498db;
+            margin-right: 8px;
+        }
+
+        .btn-view {
+            background: #e67e22;
+            margin-right: 8px;
+        }
+
+        .btn-del {
+            background: #e74c3c;
+            cursor: pointer;
+        }
     </style>
 </head>
 
@@ -169,6 +239,34 @@
 
         </div>
 
+        <!-- Camera Dashboard -->
+        <div class="camera-dashboard">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h3 style="font-size: 18px; color: #fff;">Camera Management</h3>
+                    <div style="font-size: 13px; color: #888; margin-top: 4px;">Select a camera to setup or view live
+                        feed</div>
+                </div>
+                <button type="button" class="btn-small btn-add" onclick="addNewCamera()">+ Add Camera</button>
+            </div>
+
+            <table class="camera-table">
+                <thead>
+                    <tr>
+                        <th width="10%">ID</th>
+                        <th width="25%">Name</th>
+                        <th width="35%">IP / URL</th>
+                        <th width="30%">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="cameraTableBody">
+                    <tr>
+                        <td colspan="4" style="text-align:center; color:#888;">Loading cameras...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
         <div class="server-info">
             Server running on <b id="serverAddr">loading...</b> | Port <b>8080</b>
         </div>
@@ -176,6 +274,73 @@
 
     <script>
         document.getElementById('serverAddr').textContent = window.location.hostname;
+
+        let highestCamId = 0;
+
+        function loadCameras() {
+            fetch('/api/cameras')
+                .then(r => r.json())
+                .then(data => {
+                    const tbody = document.getElementById('cameraTableBody');
+                    tbody.innerHTML = '';
+                    highestCamId = 0;
+                    if (Array.isArray(data) && data.length > 0) {
+                        data.forEach(cam => {
+                            if (cam.id > highestCamId) highestCamId = cam.id;
+
+                            let displayUrl = cam.rtspUrl || 'Not configured';
+                            if (displayUrl.includes('|')) {
+                                const p = displayUrl.split('|');
+                                displayUrl = `http://${p[0]}:${p[1]}${p[2]}`;
+                            }
+
+                            const tr = document.createElement('tr');
+                            tr.innerHTML = `
+                                <td><span style="background:#444; padding:2px 6px; border-radius:4px;">#${cam.id}</span></td>
+                                <td style="font-weight:600;">${cam.name || 'Camera ' + cam.id}</td>
+                                <td style="color:#aaa; font-family:monospace; font-size:12px;">${displayUrl}</td>
+                                <td>
+                                    <a href="/setup_online?id=${cam.id}" class="btn-small btn-setup">⚙️ Setup</a>
+                                    <a href="/camera?id=${cam.id}" class="btn-small btn-view">👁️ View</a>
+                                    <button class="btn-small btn-del" onclick="deleteCamera(${cam.id})">🗑️ Delete</button>
+                                </td>
+                            `;
+                            tbody.appendChild(tr);
+                        });
+                    } else {
+                        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:#888; padding: 20px;">No cameras configured. Click "+ Add Camera" to begin.</td></tr>';
+                    }
+                })
+                .catch(e => {
+                    document.getElementById('cameraTableBody').innerHTML = '<tr><td colspan="4" style="text-align:center; color:#e74c3c;">Failed to fetch cameras.</td></tr>';
+                });
+        }
+
+        function addNewCamera() {
+            const nextId = highestCamId + 1;
+            window.location.href = `/setup_online?id=${nextId}`;
+        }
+
+        function deleteCamera(id) {
+            if (!confirm('Are you sure you want to delete Camera #' + id + '?')) return;
+
+            fetch('/api/cameras')
+                .then(r => r.json())
+                .then(data => {
+                    if (Array.isArray(data)) {
+                        const newData = data.filter(c => c.id !== id);
+                        return fetch('/api/cameras', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(newData)
+                        });
+                    }
+                })
+                .then(() => loadCameras())
+                .catch(e => alert('Error deleting camera'));
+        }
+
+        document.addEventListener('DOMContentLoaded', loadCameras);
     </script>
 </body>
 

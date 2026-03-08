@@ -354,6 +354,12 @@
 
         <div class="setup-card">
             <form id="setupForm">
+                <input type="hidden" id="idInput" value="">
+                <div class="form-group">
+                    <label>Camera Name</label>
+                    <input type="text" id="nameInput" class="form-control" placeholder="e.g. Front Gate Camera"
+                        required>
+                </div>
                 <div class="form-group">
                     <label>IP Address</label>
                     <input type="text" id="ipInput" class="form-control" placeholder="192.168.1.100"
@@ -453,9 +459,14 @@
 
         document.getElementById('setupForm').addEventListener('submit', (e) => {
             e.preventDefault();
+            const camId = parseInt(document.getElementById('idInput').value) || Date.now(); // Fallback ID if not provided via URL
+            const name = document.getElementById('nameInput').value.trim();
             const ip = document.getElementById('ipInput').value.trim();
             const port = document.getElementById('portInput').value.trim();
             const path = document.getElementById('pathInput').value.trim();
+
+            // Format for rtspUrl will be ip|port|path so we can easily parse it back
+            const mergedUrl = `${ip}|${port}|${path}`;
 
             // Reset modal state
             logBox.innerHTML = '';
@@ -473,8 +484,31 @@
 
             appendLog(`Commanding local server to connect to camera at ${ip}:${port}${path}...`, 'info');
 
+            // 0. Update cameras.json in the background
+            fetch('/api/cameras')
+                .then(r => r.json())
+                .then(cameras => {
+                    if (!Array.isArray(cameras)) cameras = [];
+                    let found = false;
+                    for (let i = 0; i < cameras.length; i++) {
+                        if (cameras[i].id === camId) {
+                            cameras[i].name = name;
+                            cameras[i].rtspUrl = mergedUrl;
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) cameras.push({ id: camId, name: name, rtspUrl: mergedUrl });
+
+                    fetch('/api/cameras', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(cameras, null, 2)
+                    }).then(() => appendLog(`Configuration for Camera ID ${camId} saved to cameras.json`, 'success'));
+                }).catch(e => appendLog(`Warning: Failed to auto-save to cameras.json`, 'error'));
+
             // 1. Send connection request to backend
-            fetch('/api/connect_online', {
+            fetch(`/api/${camId}/connect_online`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ ip, port, path })
@@ -482,7 +516,7 @@
                 .then(res => {
                     if (res.ok) {
                         appendLog('Request sent. Waiting for camera response...', 'spin');
-                        startPolling();
+                        startPolling(camId);
                     } else {
                         appendLog(`Server returned error: ${res.status}`, 'error');
                         modalTitle.textContent = 'Connection Failed';
@@ -495,14 +529,14 @@
         });
 
         // 2. Poll for frames to verify connection
-        function startPolling() {
+        function startPolling(camId) {
             if (pollInterval) clearInterval(pollInterval);
 
             pollInterval = setInterval(() => {
                 pollAttempts++;
 
                 // Try fetching raw_frame first to see if OpenCV got a frame
-                const rawUrl = '/api/raw_frame?t=' + Date.now();
+                const rawUrl = `/api/${camId}/raw_frame?t=` + Date.now();
                 fetch(rawUrl)
                     .then(res => {
                         if (res.ok) {
@@ -513,6 +547,7 @@
                                 modalTitle.textContent = 'Camera Connected!';
                                 appendLog('Camera connected successfully! Waiting for AI...', 'success');
                                 btnProceed.style.display = 'block';
+                                btnProceed.href = '/dashboard?id=' + document.getElementById('idInput').value;
                                 btnCancel.textContent = 'Close';
                                 // Show disconnect button now that we are connected
                                 document.getElementById('btnDisconnect').style.display = 'block';
@@ -522,7 +557,7 @@
                             }
 
                             // Once raw is connected, check AI processed frame
-                            const aiUrl = '/api/current_frame?t=' + Date.now();
+                            const aiUrl = `/api/${camId}/current_frame?t=` + Date.now();
                             fetch(aiUrl).then(aiRes => {
                                 if (aiRes.ok) {
                                     aiPreviewImg.src = aiUrl;
@@ -583,10 +618,11 @@
 
         // Disconnect camera function
         function disconnectCamera() {
+            const camId = document.getElementById('idInput').value || 1;
             const btn = document.getElementById('btnDisconnect');
             btn.textContent = '⏳ Disconnecting...';
             btn.disabled = true;
-            fetch('/api/disconnect', { method: 'POST' })
+            fetch(`/api/${camId}/disconnect`, { method: 'POST' })
                 .then(r => r.json())
                 .then(data => {
                     if (data.status === 'disconnected') {
@@ -619,7 +655,8 @@
             const reader = new FileReader();
             reader.onload = function (event) {
                 const xmlContent = event.target.result;
-                fetch('/api/save_template', {
+                const camId = document.getElementById('idInput').value || 1;
+                fetch(`/api/${camId}/save_template`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/xml' },
                     body: xmlContent
@@ -663,8 +700,9 @@
             const pasteBtn = document.getElementById('btnPasteXml');
             pasteBtn.textContent = 'Applying...';
             pasteBtn.disabled = true;
+            const camId = document.getElementById('idInput').value || 1;
 
-            fetch('/api/save_template', {
+            fetch(`/api/${camId}/save_template`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/xml' },
                 body: xmlContent
@@ -693,6 +731,41 @@
                     alert('Network error while applying template: ' + err.message);
                 });
         });
+
+        // ==========================================
+        // [PHASE 14] Camera Initialization from URL
+        // ==========================================
+        document.addEventListener('DOMContentLoaded', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const camId = parseInt(urlParams.get('id'));
+
+            if (camId) {
+                document.getElementById('idInput').value = camId;
+                document.querySelector('.page-title').textContent = `Live Camera Setup (ID: ${camId})`;
+
+                fetch('/api/cameras')
+                    .then(r => r.json())
+                    .then(cameras => {
+                        if (Array.isArray(cameras)) {
+                            const cam = cameras.find(c => c.id === camId);
+                            if (cam) {
+                                document.getElementById('nameInput').value = cam.name || '';
+                                if (cam.rtspUrl && cam.rtspUrl.includes('|')) {
+                                    const parts = cam.rtspUrl.split('|');
+                                    document.getElementById('ipInput').value = parts[0] || '';
+                                    document.getElementById('portInput').value = parts[1] || '';
+                                    document.getElementById('pathInput').value = parts[2] || '';
+                                }
+                            }
+                        }
+                    })
+                    .catch(e => console.error("Could not fetch camera config", e));
+            } else {
+                // If no ID provided, default to ID 1 or auto-assign later
+                document.getElementById('idInput').value = 1;
+            }
+        });
+
     </script>
 </body>
 

@@ -182,7 +182,7 @@ public:
     
     // Add parking slot
     void addSlot(const std::vector<cv::Point>& polygon, const std::string& type = "Car") {
-        int newId = slots.size() + 1;
+        int newId = (int)slots.size() + 1;
         slots.push_back(ParkingSlot(newId, polygon, type));
     }
     

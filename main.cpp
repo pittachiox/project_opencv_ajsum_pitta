@@ -12,61 +12,58 @@ using namespace System::Windows::Forms;
 
 // ===================== Unmanaged wrapper functions =====================
 #pragma managed(push, off)
-inline bool TriggerOnlineCameraHeadlessWrapperMain(std::string ip, std::string port, std::string path);
-inline bool TriggerSaveTemplateHeadlessWrapperMain(std::string xmlContent);
-inline cv::Mat GetCurrentFrameWrapperMain();
+inline bool TriggerOnlineCameraHeadlessWrapperMain(int cameraId, std::string ip, std::string port, std::string path);
+inline bool TriggerSaveTemplateHeadlessWrapperMain(int cameraId, std::string xmlContent);
+inline cv::Mat GetCurrentFrameWrapperMain(int cameraId);
 
 // This replaces the old WinForms displayTimer — runs at 30fps
 // Pulls the latest processed frame and pushes it to the MJPEG server
 static std::atomic<bool> g_streamThreadRunning(false);
 
 void StreamingThreadFunc() {
-    long long lastSeq = -1;
+    std::map<int, long long> lastSeqs;
     while (g_streamThreadRunning.load()) {
-        cv::Mat outFrame;
-        long long displaySeq = 0;
+        for (int i = 1; i <= 4; ++i) {            
+            cv::Mat outFrame;
+            long long displaySeq = 0;
 
-        // Get the already-drawn, fully-processed frame from ProcessingLoopHeadless
-        // (DrawSceneOnline is called inside ProcessingLoopHeadless, not here)
-        GetProcessedFrameOnline(outFrame, displaySeq);
+            GetCam(i)->GetProcessedFrameOnline(outFrame, displaySeq);
 
-        if (!outFrame.empty() && displaySeq != lastSeq) {
-            // Send directly to the global web server (no re-drawing!)
-            if (g_globalWebServer) {
-                g_globalWebServer->SetLatestFrame(outFrame);
-            }
-            lastSeq = displaySeq;
-        } else if (outFrame.empty()) {
-            // No processed frame yet — show raw camera frame
-            cv::Mat raw;
-            long long rawSeq = 0;
-            GetRawFrameOnline(raw, rawSeq);
-            if (!raw.empty() && g_globalWebServer) {
-                g_globalWebServer->SetLatestFrame(raw);
+            if (!outFrame.empty() && displaySeq != lastSeqs[i]) {
+                if (g_globalWebServer) {
+                    g_globalWebServer->SetLatestFrame(i, outFrame);
+                }
+                lastSeqs[i] = displaySeq;
+            } else if (outFrame.empty()) {
+                cv::Mat raw;
+                long long rawSeq = 0;
+                GetCam(i)->GetRawFrameOnline(raw, rawSeq);
+                if (!raw.empty() && g_globalWebServer) {
+                    g_globalWebServer->SetLatestFrame(i, raw);
+                }
             }
         }
-
         std::this_thread::sleep_for(std::chrono::milliseconds(33)); // ~30 FPS
     }
 }
 #pragma managed(pop)
 
-inline cv::Mat GetProcessedFrameWrapperMain() {
+inline cv::Mat GetProcessedFrameWrapperMain(int cameraId) {
     cv::Mat frame;
     long long seq;
-    GetProcessedFrameOnline(frame, seq);
+    GetCam(cameraId)->GetProcessedFrameOnline(frame, seq);
     return frame.clone();
 }
 
-inline cv::Mat GetRawFrameWrapperMain() {
+inline cv::Mat GetRawFrameWrapperMain(int cameraId) {
     cv::Mat frame;
     long long seq;
-    GetRawFrameOnline(frame, seq);
+    GetCam(cameraId)->GetRawFrameOnline(frame, seq);
     return frame.clone();
 }
 
-inline bool TriggerSaveTemplateHeadlessWrapperMain(std::string xmlContent) {
-    std::string templateName = "web_template";
+inline bool TriggerSaveTemplateHeadlessWrapperMain(int cameraId, std::string xmlContent) {
+    std::string templateName = "web_template_" + std::to_string(cameraId);
     size_t nameStart = xmlContent.find("<name>");
     if (nameStart != std::string::npos) {
         size_t nameEnd = xmlContent.find("</name>", nameStart);
@@ -86,20 +83,20 @@ inline bool TriggerSaveTemplateHeadlessWrapperMain(std::string xmlContent) {
     out << xmlContent;
     out.close();
     
-    bool loadResult = LoadParkingTemplate_Online(filename);
+    bool loadResult = GetCam(cameraId)->LoadParkingTemplate_Online(filename);
     DumpLog("[API] LoadParkingTemplate_Online returned: " + std::string(loadResult ? "true" : "false"));
     return loadResult;
 }
 
 
-inline bool TriggerOnlineCameraHeadlessWrapperMain(std::string ip, std::string port, std::string path) {
+inline bool TriggerOnlineCameraHeadlessWrapperMain(int cameraId, std::string ip, std::string port, std::string path) {
     try {
-        DumpLog("[CONNECT] Received connect request: " + ip + ":" + port + path);
+        DumpLog("[CONNECT] Received connect request for cam " + std::to_string(cameraId) + ": " + ip + ":" + port + path);
         if (ConsoleApplication3::UploadForm::Instance != nullptr) {
             System::String^ sysIp = msclr::interop::marshal_as<System::String^>(ip);
             System::String^ sysPort = msclr::interop::marshal_as<System::String^>(port);
             System::String^ sysPath = msclr::interop::marshal_as<System::String^>(path);
-            bool result = ConsoleApplication3::UploadForm::Instance->StartCameraHeadless(sysIp, sysPort, sysPath);
+            bool result = ConsoleApplication3::UploadForm::Instance->StartCameraHeadless(cameraId, sysIp, sysPort, sysPath);
             DumpLog("[CONNECT] StartCameraHeadless returned: " + std::string(result ? "SUCCESS" : "FAILED"));
             return result;
         }
@@ -117,10 +114,10 @@ inline bool TriggerOnlineCameraHeadlessWrapperMain(std::string ip, std::string p
     }
 }
 
-inline void TriggerDisconnectHeadlessWrapperMain() {
-    DumpLog("[DISCONNECT] Received disconnect request.");
+inline void TriggerDisconnectHeadlessWrapperMain(int cameraId) {
+    DumpLog("[DISCONNECT] Received disconnect request for cam " + std::to_string(cameraId) + ".");
     if (ConsoleApplication3::UploadForm::Instance != nullptr) {
-        ConsoleApplication3::UploadForm::Instance->StopProcessingPublic();
+        ConsoleApplication3::UploadForm::Instance->StopProcessingPublic(cameraId);
         DumpLog("[DISCONNECT] Camera stopped successfully.");
     } else {
         DumpLog("[DISCONNECT] WARNING: UploadForm::Instance is null.");
