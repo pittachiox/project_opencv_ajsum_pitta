@@ -587,7 +587,7 @@ namespace ConsoleApplication3 {
 			String^ item = "Slot " + slot.id + " (" + slot.polygon.size() + " points)";
 			listBoxSlots->Items->Add(item);
 		}
-		int totalSlots = parkingManager->getSlots().size();
+		int totalSlots = (int)parkingManager->getSlots().size();
 		lblStatus->Text = "Total Slots: " + totalSlots + " | Drawing: " + (isDrawing ? "YES" : "NO");
 		UpdateStatistics();
 	}

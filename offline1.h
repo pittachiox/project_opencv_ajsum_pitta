@@ -14,7 +14,6 @@
 #include "BYTETracker.h"
 #include "ParkingSlot.h"
 #include "MjpegServer.h"  // [NEW] Added MjpegServer
-#include "ViolationDetailForm.h"
 #include "OnnxYoloInference.h" // [NEW] Added for ONNX GPU support
 
 #pragma managed(push, off)
@@ -342,8 +341,8 @@ static void ProcessFrame(const cv::Mat& inputFrame, long long frameSeq) {
 
 					if (max_class_score > CONF_THRESH && is_vehicle) {
 						float x = data[0]; float y = data[1]; float w = data[2]; float h = data[3];
-						float left = (x - 0.5 * w - dw) / ratio; 
-						float top = (y - 0.5 * h - dh) / ratio;
+						float left = (float)((x - 0.5 * w - dw) / ratio); 
+						float top = (float)((y - 0.5 * h - dh) / ratio);
 						float width = w / ratio; 
 						float height = h / ratio;
 
@@ -561,6 +560,8 @@ static void DrawScene(const cv::Mat& frame, long long displaySeq, cv::Mat& outRe
 }
 
 #pragma managed(pop)
+
+#include "ViolationDetailForm.h"
 
 namespace ConsoleApplication3 {
 	using namespace System;
@@ -1120,7 +1121,7 @@ namespace ConsoleApplication3 {
 
 							// [FIX] Update MJPEG Server inside the loop so it streams out!
 							if (g_mjpegServer_offline) {
-								g_mjpegServer_offline->SetLatestFrame(g_processedFrame_shared);
+								g_mjpegServer_offline->SetLatestFrame(0, g_processedFrame_shared);
 							}
 						}
 					}
@@ -1205,7 +1206,7 @@ namespace ConsoleApplication3 {
 					}
 				}
 
-				int violationCount = state.violatingCarIds.size();
+				int violationCount = (int)state.violatingCarIds.size();
 
 				// [PHASE 3] Optimized UI Update: Check before Set
 				String^ txtEmpty = System::String::Format(L"Empty: {0}", emptyCount);
@@ -1232,7 +1233,7 @@ namespace ConsoleApplication3 {
 						first = false;
 					}
 					json += "]}";
-					g_mjpegServer_offline->SetStats(json);
+					g_mjpegServer_offline->SetStats(0, json);
 				}
 			}
 		}
@@ -1393,7 +1394,7 @@ namespace ConsoleApplication3 {
 				
 				// [NEW] Update mjpeg stream
 				if (g_mjpegServer_offline) {
-					g_mjpegServer_offline->SetLatestFrame(result);
+					g_mjpegServer_offline->SetLatestFrame(0, result);
 				}
 				
 				MessageBox::Show("Image loaded and processed successfully!", "Success", MessageBoxButtons::OK, MessageBoxIcon::Information);
@@ -1670,7 +1671,7 @@ namespace ConsoleApplication3 {
 		std::lock_guard<std::mutex> lock(g_captureMutex_offline);
 		if (g_cap_offline && g_cap_offline->isOpened()) {
 			long long framePos = trackBar1->Value;
-			g_cap_offline->set(cv::CAP_PROP_POS_FRAMES, framePos);
+			g_cap_offline->set(cv::CAP_PROP_POS_FRAMES, (double)framePos);
 			StartProcessing();
 		}
 	}
@@ -1680,7 +1681,7 @@ namespace ConsoleApplication3 {
 			std::lock_guard<std::mutex> lock(g_captureMutex_offline);
 			if (g_cap_offline && g_cap_offline->isOpened()) {
 				long long framePos = trackBar1->Value;
-				g_cap_offline->set(cv::CAP_PROP_POS_FRAMES, framePos);
+				g_cap_offline->set(cv::CAP_PROP_POS_FRAMES, (double)framePos);
 			}
 		}
 	}

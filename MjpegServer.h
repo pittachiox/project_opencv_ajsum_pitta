@@ -26,7 +26,7 @@ inline void DumpLog(const std::string& msg) {
 
 class MjpegServer;
 __declspec(selectany) MjpegServer* g_globalWebServer = nullptr;
-using ConnectOnlineCallback = std::function<bool(std::string, std::string, std::string)>;
+using ConnectOnlineCallback = std::function<bool(int, std::string, std::string, std::string)>;
 
 #pragma comment(lib, "ws2_32.lib")
 
@@ -39,19 +39,19 @@ private:
     std::vector<SOCKET> clientSockets;
     std::mutex clientsMutex;
     
-    cv::Mat latestFrame;
+    std::map<int, cv::Mat> latestFrames;
     std::mutex frameMutex;
-    std::condition_variable frameCV;
-    bool newFrameAvailable = false;
+    std::map<int, std::unique_ptr<std::condition_variable>> frameCVs; // Need unique_ptr because cv isn't copyable
+    std::map<int, bool> newFrameAvailable;
     
     int port;
 
-    std::string latestStatsJson = "{\"empty\":0,\"normal\":0,\"carEmpty\":0,\"carNormal\":0,\"motoEmpty\":0,\"motoNormal\":0,\"violation\":0,\"logs\":[]}";
+    std::map<int, std::string> latestStatsJson;
     std::mutex statsMutex;
 
-    using SaveTemplateCallback = std::function<bool(std::string)>;
-    using GetFrameCallback = std::function<cv::Mat()>;
-    using DisconnectCallback = std::function<void()>;
+    using SaveTemplateCallback = std::function<bool(int, std::string)>;
+    using GetFrameCallback = std::function<cv::Mat(int)>;
+    using DisconnectCallback = std::function<void(int)>;
 public:
     ConnectOnlineCallback onConnectOnline;
     SaveTemplateCallback onSaveTemplate;
@@ -140,47 +140,135 @@ private:
         size_t qpos = path.find('?');
         if (qpos != std::string::npos) path = path.substr(0, qpos);
 
-        if (path == "/video") {
-            ServeMjpegStream(clientSocket);
-        } else if (path == "/api/stats") {
-            ServeStats(clientSocket);
-        } else if (path == "/api/current_frame") {
-            ServeCurrentFrame(clientSocket);
-        } else if (path == "/api/raw_frame") {
-            ServeRawFrame(clientSocket);
-        } else if (path == "/api/save_template" && request.find("POST") == 0) {
-            ServeSaveTemplate(clientSocket, request);
-        } else if (path == "/api/connect_online" && request.find("POST") == 0) {
-            ServeConnectOnline(clientSocket, request);
-        } else if (path == "/api/disconnect" && request.find("POST") == 0) {
-            ServeDisconnect(clientSocket);
-        } else if (path == "/api/anomaly_events") {
+        int cameraId = 1; // Default to 1
+        std::string actionPath = path;
+
+        // Parse /{id}/page_name
+        if (path.length() > 1 && isdigit(path[1])) {
+            size_t nextSlash = path.find('/', 1);
+            if (nextSlash != std::string::npos) {
+                try {
+                    cameraId = std::stoi(path.substr(1, nextSlash - 1));
+                    actionPath = path.substr(nextSlash);
+                } catch (...) {}
+            }
+        }
+        // Parse /api/{id}/action
+        else if (path.find("/api/") == 0 && path.length() > 5 && isdigit(path[5])) {
+            size_t nextSlash = path.find('/', 5);
+            if (nextSlash != std::string::npos) {
+                try {
+                    cameraId = std::stoi(path.substr(5, nextSlash - 5));
+                    actionPath = "/api" + path.substr(nextSlash);
+                } catch (...) {}
+            }
+        }
+
+        if (actionPath == "/video") {
+            ServeMjpegStream(clientSocket, cameraId);
+        } else if (actionPath == "/api/stats") {
+            ServeStats(clientSocket, cameraId);
+        } else if (actionPath == "/api/current_frame") {
+            ServeCurrentFrame(clientSocket, cameraId);
+        } else if (actionPath == "/api/raw_frame") {
+            ServeRawFrame(clientSocket, cameraId);
+        } else if (actionPath == "/api/save_template" && request.find("POST") == 0) {
+            ServeSaveTemplate(clientSocket, request, cameraId);
+        } else if (actionPath == "/api/connect_online" && request.find("POST") == 0) {
+            ServeConnectOnline(clientSocket, request, cameraId);
+        } else if (actionPath == "/api/disconnect" && request.find("POST") == 0) {
+            ServeDisconnect(clientSocket, cameraId);
+        } else if (actionPath == "/api/cameras" && method == "GET") {
+            ServeCamerasList(clientSocket);
+        } else if (actionPath == "/api/cameras" && method == "POST") {
+            ServeSaveCameras(clientSocket, request);
+        } else if (actionPath == "/api/anomaly_events") {
             ServeAnomalyEvents(clientSocket, request);
-        } else if (path == "/api/parking_areas") {
+        } else if (actionPath == "/api/parking_areas") {
             ServeParkingAreas(clientSocket, request);
-        } else if (path.find("/locvideo/") == 0) {
-            ServeFileDirectly(clientSocket, "C:" + path, request);
-        } else if (path.find("/smart_parking_violations/") == 0) {
-            ServeFileDirectly(clientSocket, "C:" + path, request);
-        } else if (path.find("/violations/") == 0) {
-            std::string realPath = path;
+        } else if (actionPath.find("/locvideo/") == 0) {
+            ServeFileDirectly(clientSocket, "C:" + actionPath, request);
+        } else if (actionPath.find("/smart_parking_violations/") == 0) {
+            ServeFileDirectly(clientSocket, "C:" + actionPath, request);
+        } else if (actionPath.find("/violations/") == 0) {
+            std::string realPath = actionPath;
             realPath.replace(0, 12, "/smart_parking_violations/");
             ServeFileDirectly(clientSocket, "C:" + realPath, request);
-        } else if (path == "/setup_online") {
+        } else if (actionPath == "/setup_online" || actionPath == "/setup_online.html") {
             ServeHtml(clientSocket, "setup_online.html");
-        } else if (path == "/setup_parking") {
+        } else if (actionPath == "/setup_parking" || actionPath == "/setup_parking.html") {
             ServeHtml(clientSocket, "setup_parking.html");
-        } else if (path == "/camera") {
+        } else if (actionPath == "/camera" || actionPath == "/camera.html") {
             ServeHtml(clientSocket, "camera.html");
-        } else if (path == "/dashboard") {
+        } else if (actionPath == "/dashboard") {
             ServeHtml(clientSocket, "index.html");
-        } else if (path == "/" || path == "/index.html" || path == "/home") {
+        } else if (actionPath == "/" || actionPath == "/index.html" || actionPath == "/home" || actionPath == "/home.html") {
             ServeHtml(clientSocket, "home.html");
         } else {
             std::string notFound = "HTTP/1.1 404 Not Found\r\nContent-Length: 9\r\n\r\nNot Found";
-            send(clientSocket, notFound.c_str(), notFound.length(), 0);
+            send(clientSocket, notFound.c_str(), (int)notFound.length(), 0);
             closesocket(clientSocket);
         }
+    }
+
+    // ==========================================
+    // [PHASE 14] CAMERA MANAGEMENT ENDPOINTS
+    // ==========================================
+    void ServeCamerasList(SOCKET clientSocket) {
+        std::string filePath = "C:\\camera_ids\\cameras.json";
+        std::ifstream file(filePath, std::ios::binary | std::ios::ate);
+        std::string jsonContent = "[]"; // Default
+
+        if (file.is_open()) {
+            std::streamsize size = file.tellg();
+            if (size > 0) {
+                file.seekg(0, std::ios::beg);
+                std::vector<char> buffer((unsigned int)size);
+                if (file.read(buffer.data(), size)) {
+                    jsonContent = std::string(buffer.begin(), buffer.end());
+                }
+            }
+            file.close();
+        }
+
+        std::string header = "HTTP/1.1 200 OK\r\n"
+                             "Content-Type: application/json; charset=utf-8\r\n"
+                             "Access-Control-Allow-Origin: *\r\n"
+                             "Connection: close\r\n"
+                             "Content-Length: " + std::to_string(jsonContent.size()) + "\r\n\r\n";
+        
+        send(clientSocket, header.c_str(), (int)header.length(), 0);
+        send(clientSocket, jsonContent.c_str(), (int)jsonContent.length(), 0);
+        closesocket(clientSocket);
+    }
+
+    void ServeSaveCameras(SOCKET clientSocket, const std::string& request) {
+        size_t bodyPos = request.find("\r\n\r\n");
+        bool success = false;
+        
+        if (bodyPos != std::string::npos) {
+            std::string body = request.substr(bodyPos + 4);
+            // Ensure folder exists
+            system("mkdir C:\\camera_ids 2>nul");
+            
+            std::ofstream outFile("C:\\camera_ids\\cameras.json");
+            if (outFile.is_open()) {
+                outFile << body;
+                outFile.close();
+                success = true;
+            }
+        }
+
+        std::string jsonResponse = "{\"status\":\"" + std::string(success ? "success" : "error") + "\"}";
+        std::string response = 
+            "HTTP/1.1 200 OK\r\n"
+            "Content-Type: application/json\r\n"
+            "Access-Control-Allow-Origin: *\r\n"
+            "Content-Length: " + std::to_string(jsonResponse.length()) + "\r\n"
+            "Connection: close\r\n\r\n" + jsonResponse;
+
+        send(clientSocket, response.c_str(), (int)response.length(), 0);
+        closesocket(clientSocket);
     }
 
     // ==========================================
@@ -305,8 +393,8 @@ private:
                              "Connection: close\r\n"
                              "Content-Length: " + std::to_string(jsonContent.size()) + "\r\n\r\n";
         
-        send(clientSocket, header.c_str(), header.length(), 0);
-        send(clientSocket, jsonContent.c_str(), jsonContent.length(), 0);
+        send(clientSocket, header.c_str(), (int)header.length(), 0);
+        send(clientSocket, jsonContent.c_str(), (int)jsonContent.length(), 0);
         closesocket(clientSocket);
     }
 
@@ -323,7 +411,7 @@ private:
         std::ifstream file(cleanPath, std::ios::binary | std::ios::ate);
         if (!file.is_open()) {
             std::string notFound = "HTTP/1.1 404 Not Found\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: 9\r\n\r\nNot Found";
-            send(clientSocket, notFound.c_str(), notFound.length(), 0);
+            send(clientSocket, notFound.c_str(), (int)notFound.length(), 0);
             closesocket(clientSocket);
             return;
         }
@@ -378,7 +466,7 @@ private:
                              "Content-Length: " + std::to_string(contentLength) + "\r\n\r\n";
         }
 
-        send(clientSocket, responseHeader.c_str(), responseHeader.length(), 0);
+        send(clientSocket, responseHeader.c_str(), (int)responseHeader.length(), 0);
 
         file.seekg(start, std::ios::beg);
         char buffer[8192];
@@ -397,27 +485,27 @@ private:
         closesocket(clientSocket);
     }
 
-    void ServeStats(SOCKET clientSocket) {
+    void ServeStats(SOCKET clientSocket, int cameraId) {
         std::string json;
         {
             std::lock_guard<std::mutex> lock(statsMutex);
-            json = latestStatsJson;
+            json = latestStatsJson.count(cameraId) ? latestStatsJson[cameraId] : "{\"empty\":0,\"normal\":0,\"carEmpty\":0,\"carNormal\":0,\"motoEmpty\":0,\"motoNormal\":0,\"violation\":0,\"logs\":[]}";
         }
         std::string header = "HTTP/1.1 200 OK\r\n"
                              "Content-Type: application/json; charset=utf-8\r\n"
                              "Access-Control-Allow-Origin: *\r\n"
                              "Connection: close\r\n"
                              "Content-Length: " + std::to_string(json.length()) + "\r\n\r\n";
-        send(clientSocket, header.c_str(), header.length(), 0);
-        send(clientSocket, json.c_str(), json.length(), 0);
+        send(clientSocket, header.c_str(), (int)header.length(), 0);
+        send(clientSocket, json.c_str(), (int)json.length(), 0);
         closesocket(clientSocket);
     }
 
-    void ServeDisconnect(SOCKET clientSocket) {
+    void ServeDisconnect(SOCKET clientSocket, int cameraId) {
         DumpLog("[HTTP] Received /api/disconnect");
         if (onDisconnect) {
             DisconnectCallback cb = onDisconnect;
-            std::thread([cb]() { cb(); }).detach();
+            std::thread([cb, cameraId]() { cb(cameraId); }).detach();
         }
         std::string jsonResponse = "{\"status\":\"disconnected\"}";
         std::string response =
@@ -426,11 +514,11 @@ private:
             "Access-Control-Allow-Origin: *\r\n"
             "Content-Length: " + std::to_string(jsonResponse.length()) + "\r\n"
             "Connection: close\r\n\r\n" + jsonResponse;
-        send(clientSocket, response.c_str(), response.length(), 0);
+        send(clientSocket, response.c_str(), (int)response.length(), 0);
         closesocket(clientSocket);
     }
 
-    void ServeConnectOnline(SOCKET clientSocket, const std::string& request) {
+    void ServeConnectOnline(SOCKET clientSocket, const std::string& request, int cameraId) {
         std::string ip = "192.168.1.100", port = "8080", reqPath = "/video";
         
         size_t bodyStart = request.find("\r\n\r\n");
@@ -461,8 +549,8 @@ private:
         if (onConnectOnline) {
             std::string capturedIp = ip, capturedPort = port, capturedPath = reqPath;
             ConnectOnlineCallback cb = onConnectOnline;
-            std::thread([cb, capturedIp, capturedPort, capturedPath]() {
-                cb(capturedIp, capturedPort, capturedPath);
+            std::thread([cb, cameraId, capturedIp, capturedPort, capturedPath]() {
+                cb(cameraId, capturedIp, capturedPort, capturedPath);
             }).detach();
         }
 
@@ -475,18 +563,18 @@ private:
             "Content-Length: " + std::to_string(jsonResponse.length()) + "\r\n"
             "Connection: close\r\n\r\n" + jsonResponse;
 
-        send(clientSocket, response.c_str(), response.length(), 0);
+        send(clientSocket, response.c_str(), (int)response.length(), 0);
         closesocket(clientSocket);
     }
 
-    void ServeCurrentFrame(SOCKET clientSocket) {
+    void ServeCurrentFrame(SOCKET clientSocket, int cameraId) {
         if (!onGetFrame) {
             std::string r = "HTTP/1.1 503 Service Unavailable\r\n\r\n";
-            send(clientSocket, r.c_str(), r.length(), 0);
+            send(clientSocket, r.c_str(), (int)r.length(), 0);
             closesocket(clientSocket);
             return;
         }
-        cv::Mat frame = onGetFrame();
+        cv::Mat frame = onGetFrame(cameraId);
         bool isEmpty = frame.empty();
         if (isEmpty) {
             frame = cv::Mat(480, 640, CV_8UC3, cv::Scalar(50, 50, 50));
@@ -502,19 +590,19 @@ private:
                                "Content-Length: " + std::to_string(buf.size()) + "\r\n"
                                "Cache-Control: no-cache\r\n"
                                "Connection: close\r\n\r\n";
-        send(clientSocket, response.c_str(), response.length(), 0);
-        send(clientSocket, (const char*)buf.data(), buf.size(), 0);
+        send(clientSocket, response.c_str(), (int)response.length(), 0);
+        send(clientSocket, (const char*)buf.data(), (int)buf.size(), 0);
         closesocket(clientSocket);
     }
 
-    void ServeRawFrame(SOCKET clientSocket) {
+    void ServeRawFrame(SOCKET clientSocket, int cameraId) {
         if (!onGetRawFrame) {
             std::string r = "HTTP/1.1 503 Service Unavailable\r\n\r\n";
-            send(clientSocket, r.c_str(), r.length(), 0);
+            send(clientSocket, r.c_str(), (int)r.length(), 0);
             closesocket(clientSocket);
             return;
         }
-        cv::Mat frame = onGetRawFrame();
+        cv::Mat frame = onGetRawFrame(cameraId);
         bool isEmpty = frame.empty();
         if (isEmpty) {
             frame = cv::Mat(480, 640, CV_8UC3, cv::Scalar(50, 50, 50));
@@ -530,12 +618,12 @@ private:
                                "Content-Length: " + std::to_string(buf.size()) + "\r\n"
                                "Cache-Control: no-cache\r\n"
                                "Connection: close\r\n\r\n";
-        send(clientSocket, response.c_str(), response.length(), 0);
-        send(clientSocket, (const char*)buf.data(), buf.size(), 0);
+        send(clientSocket, response.c_str(), (int)response.length(), 0);
+        send(clientSocket, (const char*)buf.data(), (int)buf.size(), 0);
         closesocket(clientSocket);
     }
 
-    void ServeSaveTemplate(SOCKET clientSocket, const std::string& request) {
+    void ServeSaveTemplate(SOCKET clientSocket, const std::string& request, int cameraId) {
         size_t bodyPos = request.find("\r\n\r\n");
         if (bodyPos == std::string::npos) {
             DumpLog("[API] /save_template -> Failed to find body delimiter.");
@@ -547,7 +635,7 @@ private:
 
         bool success = false;
         if (onSaveTemplate) {
-            success = onSaveTemplate(body);
+            success = onSaveTemplate(cameraId, body);
             DumpLog("[API] /save_template -> onSaveTemplate returned " + std::string(success ? "true" : "false"));
         }
 
@@ -559,7 +647,7 @@ private:
             "Content-Length: " + std::to_string(jsonResponse.length()) + "\r\n"
             "Connection: close\r\n\r\n" + jsonResponse;
 
-        send(clientSocket, response.c_str(), response.length(), 0);
+        send(clientSocket, response.c_str(), (int)response.length(), 0);
         closesocket(clientSocket);
     }
 
@@ -568,7 +656,7 @@ private:
         fopen_s(&f, filename.c_str(), "rb");
         if (!f) {
             std::string msg = "HTTP/1.1 404 Not Found\r\n\r\nFile not found. Please create index.html in the app directory.";
-            send(clientSocket, msg.c_str(), msg.length(), 0);
+            send(clientSocket, msg.c_str(), (int)msg.length(), 0);
             closesocket(clientSocket);
             return;
         }
@@ -586,14 +674,14 @@ private:
                              "Content-Type: text/html; charset=utf-8\r\n"
                              "Connection: close\r\n"
                              "Content-Length: " + std::to_string(fsize) + "\r\n\r\n";
-        send(clientSocket, header.c_str(), header.length(), 0);
+        send(clientSocket, header.c_str(), (int)header.length(), 0);
         if (fsize > 0) {
-            send(clientSocket, content.data(), fsize, 0);
+            send(clientSocket, content.data(), (int)fsize, 0);
         }
         closesocket(clientSocket);
     }
 
-    void ServeMjpegStream(SOCKET clientSocket) {
+    void ServeMjpegStream(SOCKET clientSocket, int cameraId) {
         // Add to client list
         {
             std::lock_guard<std::mutex> lock(clientsMutex);
@@ -606,7 +694,7 @@ private:
                                  "Connection: keep-alive\r\n"
                                  "Cache-Control: no-cache\r\n"
                                  "Pragma: no-cache\r\n\r\n";
-        send(clientSocket, httpHeader.c_str(), httpHeader.length(), 0);
+        send(clientSocket, httpHeader.c_str(), (int)httpHeader.length(), 0);
 
         std::vector<uchar> buffer;
         std::vector<int> params = {cv::IMWRITE_JPEG_QUALITY, 70}; 
@@ -615,7 +703,10 @@ private:
             cv::Mat frameToSend;
             {
                 std::unique_lock<std::mutex> lock(frameMutex);
-                if (!frameCV.wait_for(lock, std::chrono::milliseconds(500), [this] { return newFrameAvailable || !isRunning; })) {
+                if (frameCVs.find(cameraId) == frameCVs.end()) {
+                    frameCVs[cameraId] = std::make_unique<std::condition_variable>();
+                }
+                if (!frameCVs[cameraId]->wait_for(lock, std::chrono::milliseconds(500), [this, cameraId] { return newFrameAvailable[cameraId] || !isRunning; })) {
                     // Timeout, check connection
                     int error = 0;
                     socklen_t len = sizeof(error);
@@ -627,14 +718,14 @@ private:
                 
                 if (!isRunning) break;
                 
-                if (latestFrame.empty()) {
-                    newFrameAvailable = false;
+                if (latestFrames[cameraId].empty()) {
+                    newFrameAvailable[cameraId] = false;
                     continue;
                 }
                 
                 // Copy frame to avoid holding lock during encoding
-                frameToSend = latestFrame.clone();
-                newFrameAvailable = false;
+                frameToSend = latestFrames[cameraId].clone();
+                newFrameAvailable[cameraId] = false;
             }
 
             if (!frameToSend.empty()) {
@@ -645,16 +736,16 @@ private:
                                           "Content-Length: " + std::to_string(buffer.size()) + "\r\n\r\n";
                 
                 // Send Header
-                int bytesSent = send(clientSocket, frameHeader.c_str(), frameHeader.length(), 0);
+                int bytesSent = send(clientSocket, frameHeader.c_str(), (int)frameHeader.length(), 0);
                 if (bytesSent == SOCKET_ERROR) break;
                 
                 // Send Image Data
-                bytesSent = send(clientSocket, (const char*)buffer.data(), buffer.size(), 0);
+                bytesSent = send(clientSocket, (const char*)buffer.data(), (int)buffer.size(), 0);
                 if (bytesSent == SOCKET_ERROR) break;
                 
                 // Send Footer
                 std::string frameFooter = "\r\n";
-                bytesSent = send(clientSocket, frameFooter.c_str(), frameFooter.length(), 0);
+                bytesSent = send(clientSocket, frameFooter.c_str(), (int)frameFooter.length(), 0);
                 if (bytesSent == SOCKET_ERROR) break;
             }
         }
@@ -722,7 +813,12 @@ public:
         isRunning = false;
         
         // Notify any waiting threads to wake up and exit
-        frameCV.notify_all();
+        {
+            std::lock_guard<std::mutex> lock(frameMutex);
+            for (auto& pair : frameCVs) {
+                if (pair.second) pair.second->notify_all();
+            }
+        }
 
         if (serverSocket != INVALID_SOCKET) {
             closesocket(serverSocket);
@@ -745,27 +841,30 @@ public:
         WSACleanup();
     }
 
-    void SetLatestFrame(const cv::Mat& frame) {
+    void SetLatestFrame(int cameraId, const cv::Mat& frame) {
         if (!isRunning) return;
         
         {
             std::lock_guard<std::mutex> lock(frameMutex);
-            latestFrame = frame.clone();
-            newFrameAvailable = true;
+            latestFrames[cameraId] = frame.clone();
+            newFrameAvailable[cameraId] = true;
+            if (frameCVs.find(cameraId) == frameCVs.end()) {
+                frameCVs[cameraId] = std::make_unique<std::condition_variable>();
+            }
         }
-        frameCV.notify_all();
+        if (frameCVs[cameraId]) frameCVs[cameraId]->notify_all();
 
 		// (Removed debug print here to save resources)
     }
 
-    void SetStats(const std::string& json) {
+    void SetStats(int cameraId, const std::string& json) {
         std::lock_guard<std::mutex> lock(statsMutex);
-        latestStatsJson = json;
+        latestStatsJson[cameraId] = json;
     }
     
     int GetClientCount() {
         std::lock_guard<std::mutex> lock(clientsMutex);
-        return clientSockets.size();
+        return (int)clientSockets.size();
     }
     
     int GetPort() const {

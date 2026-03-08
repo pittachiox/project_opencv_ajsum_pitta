@@ -51,8 +51,6 @@ namespace ConsoleApplication3 {
 
 
 	private: System::Windows::Forms::Button^ btnSeeCamera;
-
-
 	private: System::Windows::Forms::Button^ btnParkingSetup;
 	private: System::ComponentModel::Container^ components;
 
