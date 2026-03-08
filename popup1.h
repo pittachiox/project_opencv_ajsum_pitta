@@ -3,19 +3,7 @@
 #include "offline1.h"
 #include <msclr/marshal_cppstd.h>
 
-#pragma managed(push, off)
-inline bool TriggerOnlineCameraHeadlessWrapper(std::string ip, std::string port, std::string path);
-#pragma managed(pop)
-
-inline bool TriggerOnlineCameraHeadlessWrapper(std::string ip, std::string port, std::string path) {
-	if (ConsoleApplication3::UploadForm::Instance != nullptr) {
-		System::String^ sysIp = msclr::interop::marshal_as<System::String^>(ip);
-		System::String^ sysPort = msclr::interop::marshal_as<System::String^>(port);
-		System::String^ sysPath = msclr::interop::marshal_as<System::String^>(path);
-		return ConsoleApplication3::UploadForm::Instance->StartCameraHeadless(sysIp, sysPort, sysPath);
-	}
-	return false;
-}
+// The wrappers are now defined and mapped exclusively in main.cpp
 
 namespace ConsoleApplication3 {
 
@@ -36,39 +24,55 @@ namespace ConsoleApplication3 {
 		}
 
 	private: System::Void popup1_Load(System::Object^ sender, System::EventArgs^ e) {
+		// [GPU UPDATE] Automatically fetch GPU names via nvidia-smi
+		cmbGpuSelect->Items->Clear();
+		try {
+			System::Diagnostics::Process^ process = gcnew System::Diagnostics::Process();
+			process->StartInfo->FileName = "nvidia-smi";
+			process->StartInfo->Arguments = "--query-gpu=index,name --format=csv,noheader";
+			process->StartInfo->UseShellExecute = false;
+			process->StartInfo->RedirectStandardOutput = true;
+			process->StartInfo->CreateNoWindow = true;
+			process->Start();
+			System::String^ output = process->StandardOutput->ReadToEnd();
+			process->WaitForExit();
+			
+			cli::array<System::String^>^ lines = output->Split(gcnew cli::array<System::Char>{'\n', '\r'}, System::StringSplitOptions::RemoveEmptyEntries);
+			for each (System::String^ line in lines) {
+				cmbGpuSelect->Items->Add("GPU " + line); // Output is like "0, NVIDIA GeForce RTX 3050 Ti Laptop GPU"
+			}
+		} catch (...) { }
+		
+		// Fallback if nvidia-smi fails
+		if (cmbGpuSelect->Items->Count == 0) {
+			cmbGpuSelect->Items->AddRange(gcnew cli::array< System::Object^  >(4) { L"GPU 0 (Primary)", L"GPU 1 (Secondary)", L"GPU 2", L"GPU 3" });
+		}
+		
+		cmbGpuSelect->SelectedIndex = 0; // Default to GPU 0
+	}
+	
+	private: System::Void btnStartWeb_Click(System::Object^ sender, System::EventArgs^ e) {
+		// Save Selected GPU ID globally
+		g_selectedGpuId = cmbGpuSelect->SelectedIndex;
+
 		// Hide the GUI completely and run as a service
 		this->Opacity = 0;
 		this->ShowInTaskbar = false;
-		
-		// Wait a tiny bit and then hide properly
-		System::Windows::Forms::Timer^ t = gcnew System::Windows::Forms::Timer();
-		t->Interval = 100;
-		t->Tick += gcnew System::EventHandler(this, &popup1::HideSelf);
-		t->Start();
+		this->Hide();
 
-		// Start the global MjpegServer on port 8080
-		if (!g_globalWebServer) {
-			g_globalWebServer = new MjpegServer(8080);
+		// Start the global MjpegServer on port 8080 (Callbacks are already bound in main.cpp)
+		if (g_globalWebServer) {
 			g_globalWebServer->Start();
 		}
 
-		// Initialize UploadForm silently
+		// Initialize UploadForm silently (This is when the AI Model actually loads with the chosen GPU!)
 		if (UploadForm::Instance == nullptr) {
 			UploadForm^ onlineForm = gcnew UploadForm();
 			onlineForm->Hide();
 		}
-
-		// Connect the web API to the form's headless start method
-		g_globalWebServer->SetConnectOnlineCallback(&TriggerOnlineCameraHeadlessWrapper);
 		
 		// Open the default browser to the web interface
 		System::Diagnostics::Process::Start("http://localhost:8080/");
-	}
-	
-	private: System::Void HideSelf(System::Object^ sender, System::EventArgs^ e) {
-		System::Windows::Forms::Timer^ t = safe_cast<System::Windows::Forms::Timer^>(sender);
-		t->Stop();
-		this->Hide();
 	}
 
 	protected:
@@ -81,8 +85,9 @@ namespace ConsoleApplication3 {
 		}
 	private: System::Windows::Forms::Panel^ panel1;
 	private: System::Windows::Forms::Label^ label1;
-	private: System::Windows::Forms::Button^ btnOffline;
-	private: System::Windows::Forms::Button^ btnOnline;
+	private: System::Windows::Forms::Label^ labelGpu;
+	private: System::Windows::Forms::ComboBox^ cmbGpuSelect;
+	private: System::Windows::Forms::Button^ btnStartWeb;
 	protected:
 
 	private:
@@ -93,8 +98,9 @@ namespace ConsoleApplication3 {
 		{
 			this->panel1 = (gcnew System::Windows::Forms::Panel());
 			this->label1 = (gcnew System::Windows::Forms::Label());
-			this->btnOffline = (gcnew System::Windows::Forms::Button());
-			this->btnOnline = (gcnew System::Windows::Forms::Button());
+			this->labelGpu = (gcnew System::Windows::Forms::Label());
+			this->cmbGpuSelect = (gcnew System::Windows::Forms::ComboBox());
+			this->btnStartWeb = (gcnew System::Windows::Forms::Button());
 			this->panel1->SuspendLayout();
 			this->SuspendLayout();
 			// 
@@ -105,7 +111,7 @@ namespace ConsoleApplication3 {
 			this->panel1->Dock = System::Windows::Forms::DockStyle::Top;
 			this->panel1->Location = System::Drawing::Point(0, 0);
 			this->panel1->Name = L"panel1";
-			this->panel1->Size = System::Drawing::Size(284, 50);
+			this->panel1->Size = System::Drawing::Size(300, 50);
 			this->panel1->TabIndex = 0;
 			// 
 			// label1
@@ -113,52 +119,58 @@ namespace ConsoleApplication3 {
 			this->label1->AutoSize = true;
 			this->label1->Font = (gcnew System::Drawing::Font(L"Segoe UI", 12, System::Drawing::FontStyle::Bold));
 			this->label1->ForeColor = System::Drawing::SystemColors::ButtonFace;
-			this->label1->Location = System::Drawing::Point(70, 15);
+			this->label1->Location = System::Drawing::Point(60, 15);
 			this->label1->Name = L"label1";
-			this->label1->Size = System::Drawing::Size(144, 21);
+			this->label1->Size = System::Drawing::Size(180, 21);
 			this->label1->TabIndex = 0;
-			this->label1->Text = L"เลือกโหมดการดู";
+			this->label1->Text = L"System Configuration";
 			// 
-			// btnOffline
+			// labelGpu
 			// 
-			this->btnOffline->BackColor = System::Drawing::Color::FromArgb(static_cast<System::Int32>(static_cast<System::Byte>(220)), 
-				static_cast<System::Int32>(static_cast<System::Byte>(53)), static_cast<System::Int32>(static_cast<System::Byte>(69)));
-			this->btnOffline->FlatAppearance->BorderSize = 0;
-			this->btnOffline->FlatStyle = System::Windows::Forms::FlatStyle::Flat;
-			this->btnOffline->Font = (gcnew System::Drawing::Font(L"Segoe UI", 11, System::Drawing::FontStyle::Bold));
-			this->btnOffline->ForeColor = System::Drawing::SystemColors::ButtonHighlight;
-			this->btnOffline->Location = System::Drawing::Point(50, 80);
-			this->btnOffline->Name = L"btnOffline";
-			this->btnOffline->Size = System::Drawing::Size(180, 50);
-			this->btnOffline->TabIndex = 1;
-			this->btnOffline->Text = L"Offline\r\n(วิดีโอ/รูปภาพ)";
-			this->btnOffline->UseVisualStyleBackColor = false;
-			this->btnOffline->Click += gcnew System::EventHandler(this, &popup1::btnOffline_Click);
+			this->labelGpu->AutoSize = true;
+			this->labelGpu->Font = (gcnew System::Drawing::Font(L"Segoe UI", 10, System::Drawing::FontStyle::Bold));
+			this->labelGpu->Location = System::Drawing::Point(30, 80);
+			this->labelGpu->Name = L"labelGpu";
+			this->labelGpu->Size = System::Drawing::Size(120, 19);
+			this->labelGpu->TabIndex = 1;
+			this->labelGpu->Text = L"Select GPU (ID):";
 			// 
-			// btnOnline
+			// cmbGpuSelect
 			// 
-			this->btnOnline->BackColor = System::Drawing::Color::FromArgb(static_cast<System::Int32>(static_cast<System::Byte>(40)), 
+			this->cmbGpuSelect->DropDownStyle = System::Windows::Forms::ComboBoxStyle::DropDownList;
+			this->cmbGpuSelect->Font = (gcnew System::Drawing::Font(L"Segoe UI", 10));
+			this->cmbGpuSelect->FormattingEnabled = true;
+			this->cmbGpuSelect->Items->AddRange(gcnew cli::array< System::Object^  >(4) { L"GPU 0 (Primary)", L"GPU 1 (Secondary)", L"GPU 2", L"GPU 3" });
+			this->cmbGpuSelect->Location = System::Drawing::Point(34, 105);
+			this->cmbGpuSelect->Name = L"cmbGpuSelect";
+			this->cmbGpuSelect->Size = System::Drawing::Size(230, 25);
+			this->cmbGpuSelect->TabIndex = 2;
+			// 
+			// btnStartWeb
+			// 
+			this->btnStartWeb->BackColor = System::Drawing::Color::FromArgb(static_cast<System::Int32>(static_cast<System::Byte>(40)), 
 				static_cast<System::Int32>(static_cast<System::Byte>(167)), static_cast<System::Int32>(static_cast<System::Byte>(69)));
-			this->btnOnline->FlatAppearance->BorderSize = 0;
-			this->btnOnline->FlatStyle = System::Windows::Forms::FlatStyle::Flat;
-			this->btnOnline->Font = (gcnew System::Drawing::Font(L"Segoe UI", 11, System::Drawing::FontStyle::Bold));
-			this->btnOnline->ForeColor = System::Drawing::SystemColors::ButtonHighlight;
-			this->btnOnline->Location = System::Drawing::Point(50, 145);
-			this->btnOnline->Name = L"btnOnline";
-			this->btnOnline->Size = System::Drawing::Size(180, 50);
-			this->btnOnline->TabIndex = 2;
-			this->btnOnline->Text = L"Online\r\n(กล้องสด)";
-			this->btnOnline->UseVisualStyleBackColor = false;
-			this->btnOnline->Click += gcnew System::EventHandler(this, &popup1::btnOnline_Click);
+			this->btnStartWeb->FlatAppearance->BorderSize = 0;
+			this->btnStartWeb->FlatStyle = System::Windows::Forms::FlatStyle::Flat;
+			this->btnStartWeb->Font = (gcnew System::Drawing::Font(L"Segoe UI", 11, System::Drawing::FontStyle::Bold));
+			this->btnStartWeb->ForeColor = System::Drawing::SystemColors::ButtonHighlight;
+			this->btnStartWeb->Location = System::Drawing::Point(34, 150);
+			this->btnStartWeb->Name = L"btnStartWeb";
+			this->btnStartWeb->Size = System::Drawing::Size(230, 45);
+			this->btnStartWeb->TabIndex = 3;
+			this->btnStartWeb->Text = L"🚀 Launch Web System";
+			this->btnStartWeb->UseVisualStyleBackColor = false;
+			this->btnStartWeb->Click += gcnew System::EventHandler(this, &popup1::btnStartWeb_Click);
 			// 
 			// popup1
 			// 
 			this->AutoScaleDimensions = System::Drawing::SizeF(6, 13);
 			this->AutoScaleMode = System::Windows::Forms::AutoScaleMode::Font;
 			this->BackColor = System::Drawing::Color::WhiteSmoke;
-			this->ClientSize = System::Drawing::Size(284, 230);
-			this->Controls->Add(this->btnOnline);
-			this->Controls->Add(this->btnOffline);
+			this->ClientSize = System::Drawing::Size(300, 220);
+			this->Controls->Add(this->btnStartWeb);
+			this->Controls->Add(this->cmbGpuSelect);
+			this->Controls->Add(this->labelGpu);
 			this->Controls->Add(this->panel1);
 			this->FormBorderStyle = System::Windows::Forms::FormBorderStyle::FixedDialog;
 			this->MaximizeBox = false;
@@ -173,20 +185,7 @@ namespace ConsoleApplication3 {
 		}
 #pragma endregion
 	
-	private: System::Void btnOffline_Click(System::Object^ sender, System::EventArgs^ e) {
-		// เปิดหน้าฟอร์ม Offline (OfflineUploadForm)
-		OfflineUploadForm^ offlineForm = gcnew OfflineUploadForm();
-		this->Hide();
-		offlineForm->ShowDialog();
-		this->Close();
-	}
+	// [Removed old Offline/Online switch buttons since we boot directly to web now]
 
-	private: System::Void btnOnline_Click(System::Object^ sender, System::EventArgs^ e) {
-		// เปิดหน้าฟอร์ม Online (UploadForm)
-		UploadForm^ onlineForm = gcnew UploadForm();
-		this->Hide();
-		onlineForm->ShowDialog();
-		this->Close();
-	}
 	};
 }

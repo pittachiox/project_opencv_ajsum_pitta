@@ -305,10 +305,12 @@
 
         async function fetchStats() {
             try {
-                const response = await fetch('/api/stats');
+                // Prevent aggressive browser caching of the GET request
+                const response = await fetch('/api/stats?t=' + new Date().getTime());
                 if (!response.ok) throw new Error('Network response was not ok');
 
                 const data = await response.json();
+                console.log('Fetched data:', data); // [DEBUG] Print to browser console
 
                 // Update stats
                 document.getElementById('val-empty').innerText = data.empty || 0;
@@ -336,10 +338,8 @@
                         `;
                     });
 
-                    // Only update DOM if HTML changed to prevent scroll jumping
-                    if (logsList.innerHTML !== html) {
-                        logsList.innerHTML = html;
-                    }
+                    // Assign directly. Browsers normalize innerHTML, making strict string comparison unreliable.
+                    logsList.innerHTML = html;
                 } else {
                     logsList.innerHTML = `
                         <div class="log-item" style="border-left-color: #28a745;">

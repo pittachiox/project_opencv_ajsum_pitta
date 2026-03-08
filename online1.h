@@ -84,6 +84,7 @@ __declspec(selectany) std::mutex        g_videoCurrentFrameMutex;
 __declspec(selectany) cv::Mat           g_videoCurrentFrame; // The frame to duplicate if AI lags
 __declspec(selectany) bool g_modelReady = false;
 __declspec(selectany) std::atomic<bool> g_parkingEnabled_online(false); // [PHASE 1 FIX] Use atomic for thread safety
+__declspec(selectany) bool templateSet_online = false; // [FIX] Required globally for template resetting
 
 const int YOLO_INPUT_SIZE = 640;
 const float CONF_THRESHOLD = 0.25f;
@@ -104,6 +105,8 @@ __declspec(selectany) long long g_processedSeq_online = 0;
 __declspec(selectany) std::mutex g_processedMutex_online;
 
 // *** [NEW] MJPEG SERVER ***
+extern MjpegServer* g_globalWebServer;
+
 __declspec(selectany) MjpegServer* g_mjpegServer_online = nullptr;
 
 // *** [PHASE 2] PERFORMANCE OPTIMIZATION ***
@@ -303,9 +306,9 @@ static void InitGlobalModel(const std::string& modelPath) {
 	if (g_tracker) { delete g_tracker; g_tracker = nullptr; }
 
 	try {
-		// Use ONNX Runtime with GPU acceleration
+		// Use ONNX Runtime with GPU acceleration and user-selected Device ID
 		g_onnx_net = new OnnxYoloInference();
-		if (!g_onnx_net->loadModel(modelPath, true)) { // true = use GPU
+		if (!g_onnx_net->loadModel(modelPath, true, g_selectedGpuId)) { // true = use GPU, pass ID
 			delete g_onnx_net;
 			g_onnx_net = nullptr;
 			OutputDebugStringA("[ERROR] Failed to load ONNX model with GPU\n");
@@ -335,6 +338,7 @@ static void InitGlobalModel(const std::string& modelPath) {
 // [NEW] โหลด Parking Template
 static bool LoadParkingTemplate_Online(const std::string& filename) {
 	ResetParkingCache_Online();
+	templateSet_online = false; // [FIX] Force the engine to register the new template frame geometry
 
 	if (!g_pm_logic_online) g_pm_logic_online = new ParkingManager();
 	if (!g_pm_display_online) g_pm_display_online = new ParkingManager();
@@ -397,14 +401,20 @@ static void ProcessFrameOnline(const cv::Mat& inputFrame, long long frameSeq) {
 
 		if (output_data.dims == 3) {
 			output_data = output_data.reshape(1, rows);
-			cv::transpose(output_data, output_data);
+			// Only transpose if we have a format like YOLOv8 (e.g., 84x8400)
+			if (dimensions > rows) {
+				cv::transpose(output_data, output_data);
+			}
 			rows = output_data.rows;
 			dimensions = output_data.cols;
 		}
 		else {
-			cv::Mat output_t;
-			cv::transpose(output_data.reshape(1, output_data.size[1]), output_t);
-			output_data = output_t;
+			output_data = output_data.reshape(1, output_data.size[1]);
+			if (output_data.cols > output_data.rows) {
+				cv::Mat output_t;
+				cv::transpose(output_data, output_t);
+				output_data = output_t;
+			}
 			rows = output_data.rows;
 			dimensions = output_data.cols;
 		}
@@ -414,28 +424,32 @@ static void ProcessFrameOnline(const cv::Mat& inputFrame, long long frameSeq) {
 		std::vector<float> confs;
 		std::vector<cv::Rect> boxes;
 
-		// Check output format: yolo26s uses [x1, y1, x2, y2, conf, class] (6 cols)
+		// Check output format: yolo26s uses [cx, cy, w, h, conf, class] (6 cols)
 		bool is_yolo26s_format = (dimensions == 6);
 
 		for (int i = 0; i < rows; i++) {
 			if (is_yolo26s_format) {
-				// yolo26s format: [x1, y1, x2, y2, conf, class]
+				// yolo26s format: [x1, y1, x2, y2, conf, class_id] (Absolute Coordinates)
 				float x1_lb = data[0];
 				float y1_lb = data[1];
-				float x2_lb = data[2];
-				float y2_lb = data[3];
-				float conf = data[4];
-				int cls = (int)data[5];
+				float x2_lb  = data[2];
+				float y2_lb  = data[3];
+				float conf  = data[4];
+				int cls     = (int)data[5];
 
-				// Filter by confidence and class (car = class 2)
-				if (conf > CONF_THRESHOLD && cls == 2) {
-					// Convert from letterbox coordinates to original image coordinates
-					float left = (x1_lb - dw) / ratio;
-					float top = (y1_lb - dh) / ratio;
-					float right = (x2_lb - dw) / ratio;
+				// The Python test showed class_id can be 0 or 60. We accept any reasonable vehicle class.
+				// For the custom car model, we'll accept classes: 0, 1, 2, 3, 5, 7.
+				// However, if the user explicitly trained a custom model with only 1-2 classes, it might output 0.
+				bool is_vehicle = (cls == 0 || cls == 1 || cls == 2 || cls == 3 || cls == 5 || cls == 7);
+
+				if (conf > CONF_THRESHOLD && is_vehicle) {
+					// Convert from letterbox corner coordinates back to original image coordinates
+					float left   = (x1_lb - dw) / ratio;
+					float top    = (y1_lb - dh) / ratio;
+					float right  = (x2_lb - dw) / ratio;
 					float bottom = (y2_lb - dh) / ratio;
 
-					float width = right - left;
+					float width  = right - left;
 					float height = bottom - top;
 
 					// Sanity check
@@ -447,23 +461,33 @@ static void ProcessFrameOnline(const cv::Mat& inputFrame, long long frameSeq) {
 				}
 			}
 			else {
-				// Standard YOLO format: [x_center, y_center, w, h, ...classes...]
-				float* classes_scores = data + 4;
-				if (dimensions >= 4 + (int)g_classes.size()) {
-					cv::Mat scores(1, (int)g_classes.size(), CV_32FC1, classes_scores);
+				// Standard YOLO format: [x_center, y_center, w, h, class_0_conf, class_1_conf, ...]
+				int num_classes = dimensions - 4;
+				if (num_classes > 0) {
+					float* classes_scores = data + 4;
+					cv::Mat scores(1, num_classes, CV_32FC1, classes_scores);
 					cv::Point class_id;
 					double max_class_score;
 					cv::minMaxLoc(scores, 0, &max_class_score, 0, &class_id);
 
-					if (max_class_score > CONF_THRESHOLD && class_id.x == 2) {
-						float x = data[0]; float y = data[1]; float w = data[2]; float h = data[3];
+					bool is_vehicle = (class_id.x == 0 || class_id.x == 1 || class_id.x == 2 || class_id.x == 3 || class_id.x == 5 || class_id.x == 7);
+
+					if (max_class_score > CONF_THRESHOLD && is_vehicle) {
+						float x = data[0]; 
+						float y = data[1]; 
+						float w = data[2]; 
+						float h = data[3];
+
 						float left = (x - 0.5 * w - dw) / ratio;
 						float top = (y - 0.5 * h - dh) / ratio;
 						float width = w / ratio;
 						float height = h / ratio;
-						boxes.push_back(cv::Rect((int)left, (int)top, (int)width, (int)height));
-						confs.push_back((float)max_class_score);
-						class_ids.push_back(class_id.x);
+
+						if (width > 0 && height > 0) {
+							boxes.push_back(cv::Rect((int)left, (int)top, (int)width, (int)height));
+							confs.push_back((float)max_class_score);
+							class_ids.push_back(class_id.x);
+						}
 					}
 				}
 			}
@@ -496,7 +520,6 @@ static void ProcessFrameOnline(const cv::Mat& inputFrame, long long frameSeq) {
 
 		bool parkingEnabled = g_parkingEnabled_online.load(); // [PHASE 1 FIX] Use atomic load
 		if (parkingEnabled && g_pm_logic_online) {
-			static bool templateSet_online = false;
 			if (!templateSet_online) {
 				g_pm_logic_online->setTemplateFrame(inputFrame);
 				templateSet_online = true;
@@ -612,11 +635,8 @@ static void DrawSceneOnline(const cv::Mat& frame, long long displaySeq, cv::Mat&
 					cv::Rect roi = box & cv::Rect(0, 0, outResult.cols, outResult.rows);
 					if (roi.area() > 0) {
 						cv::Mat roiMat = outResult(roi);
-						// [PHASE 3] Reuse red overlay buffer
-						if (g_redOverlayBuffer_online.size() != roi.size() || g_redOverlayBuffer_online.type() != CV_8UC3) {
-							g_redOverlayBuffer_online = cv::Mat(roi.size(), CV_8UC3, cv::Scalar(0, 0, 255));
-						}
-						cv::addWeighted(roiMat, 0.6, g_redOverlayBuffer_online, 0.4, 0, roiMat);
+						cv::Mat redBuf(roi.size(), CV_8UC3, cv::Scalar(0, 0, 255));
+						cv::addWeighted(roiMat, 0.6, redBuf, 0.4, 0, roiMat);
 					}
 					cv::rectangle(outResult, box, cv::Scalar(0, 0, 255), 2);
 				}
@@ -752,12 +772,17 @@ static void VideoRecordingThreadFunc_Online(int width, int height) {
 	
 	auto nextFrameTime = std::chrono::steady_clock::now();
 
+	cv::Mat lastValidFrame;
+
 	while (g_videoRecordingRunning.load()) {
 		cv::Mat frameToWrite;
 		{
 			std::lock_guard<std::mutex> lock(g_videoCurrentFrameMutex);
 			if (!g_videoCurrentFrame.empty()) {
-				frameToWrite = g_videoCurrentFrame.clone(); // ALWAYS get the latest, even if duplicated
+				frameToWrite = g_videoCurrentFrame.clone(); 
+				lastValidFrame = frameToWrite.clone();
+			} else if (!lastValidFrame.empty()) {
+				frameToWrite = lastValidFrame.clone(); // Duplicate last frame to pad the timeline
 			}
 		}
 
@@ -768,8 +793,9 @@ static void VideoRecordingThreadFunc_Online(int width, int height) {
 				g_videoWriter_online->write(frameToWrite);
 				g_videoFramesWritten++;
 
-				// Check if 60 seconds (exactly 600 frames) have elapsed to ensure 60s playback!
-				if (g_videoFramesWritten >= (targetFPS * VIDEO_CLIP_SECONDS)) {
+				// Force split strictly by clock time
+				double secondsElapsed = ((double)cv::getTickCount() - (double)g_videoClipStartTick) / cv::getTickFrequency();
+				if (secondsElapsed >= VIDEO_CLIP_SECONDS) {
 					needsNewClip = true;
 				}
 			}
@@ -785,11 +811,6 @@ static void VideoRecordingThreadFunc_Online(int width, int height) {
 		auto now = std::chrono::steady_clock::now();
 		if (now < nextFrameTime) {
 			std::this_thread::sleep_until(nextFrameTime);
-		} else {
-			// Severe system lag recovery: If we fell behind real-time by more than 2 frames, snap clock to now
-			if (now > nextFrameTime + std::chrono::milliseconds(frameDelayMs * 2)) {
-				nextFrameTime = now;
-			}
 		}
 	}
 
@@ -854,6 +875,10 @@ namespace ConsoleApplication3 {
 
 	public: bool StartCameraHeadless(String^ ip, String^ port, String^ path) {
 		int currentAttemptId = ++g_connectionAttemptId_online;
+		
+		// [FIX CRASH] Stop any existing reader threads to prevent AccessViolation
+		// when OpenGlobalCameraFromIP deletes g_cap while the thread is still reading.
+		StopProcessing();
 		
 		if (!path->StartsWith("/")) {
 			path = "/" + path;
@@ -1438,8 +1463,6 @@ private: System::Windows::Forms::Label^ label1;
 
 	// *** [OPTIMIZED] UI TIMER - หยิบภาพมาโชว์อย่างเดียว (0.1ms) ***
 	private: System::Void timer1_Tick(System::Object^ sender, System::EventArgs^ e) {
-		if (isBackgroundMode) return; // [NEW] Skip updating UI if in background
-
 		try {
 			cv::Mat finalFrame;
 			long long seq = 0;
@@ -1449,11 +1472,14 @@ private: System::Windows::Forms::Label^ label1;
 			lastDisplaySeq = seq;
 
 			if (!finalFrame.empty()) {
-				UpdatePictureBox(finalFrame);
-				// Check for violations (no need to clone, just read-only access)
+				// Only update picture box when NOT in background mode — saves CPU/GDI
+				if (!isBackgroundMode) {
+					UpdatePictureBox(finalFrame);
+				}
+				// Violation checks always run — needed for logging even in background mode
 				bool parkingEnabled = g_parkingEnabled_online.load();
 				if (parkingEnabled) {
-					CheckViolations_Online(finalFrame); // [FIX] Pass by reference, no clone
+					CheckViolations_Online(finalFrame);
 				}
 			}
 
@@ -1529,6 +1555,75 @@ private: System::Windows::Forms::Label^ label1;
 		}
 		catch (...) {}
 	}
+	// Called from ProcessingLoopHeadless to keep the web dashboard fed with parking stats
+	// This is needed because timer1_Tick (WinForms UI timer) may not fire in headless mode.
+	private: void UpdateWebStats() {
+		if (!g_mjpegServer_online) return;
+		OnlineAppState state;
+		{
+			std::lock_guard<std::mutex> lock(g_onlineStateMutex);
+			state = g_onlineState;
+		}
+		if (state.slotStatuses.empty()) return;
+
+		int emptyCount = 0, occupiedCount = 0, carEmpty = 0, carNormal = 0, motoEmpty = 0, motoNormal = 0;
+		for (const auto& slotEntry : state.slotStatuses) {
+			int slotId = slotEntry.first;
+			std::string type = "Car";
+			if (state.slotTypes.find(slotId) != state.slotTypes.end())
+				type = state.slotTypes.at(slotId);
+			if (slotEntry.second == SlotStatus::EMPTY) {
+				emptyCount++;
+				if (type == "Motorcycle") motoEmpty++; else carEmpty++;
+			} else {
+				occupiedCount++;
+				if (type == "Motorcycle") motoNormal++; else carNormal++;
+			}
+		}
+		int violationCount = (int)state.violatingCarIds.size();
+
+		std::string json = "{\"empty\":" + std::to_string(emptyCount) +
+		                   ",\"normal\":" + std::to_string(occupiedCount) +
+		                   ",\"carEmpty\":" + std::to_string(carEmpty) +
+		                   ",\"carNormal\":" + std::to_string(carNormal) +
+		                   ",\"motoEmpty\":" + std::to_string(motoEmpty) +
+		                   ",\"motoNormal\":" + std::to_string(motoNormal) +
+		                   ",\"violation\":" + std::to_string(violationCount) + ",\"logs\":[";
+		bool first = true;
+		int logCount = 0;
+		// Send up to the 5 most recent logs
+		for (int i = violationsList_online->Count - 1; i >= 0; i--) {
+			if (logCount >= 5) break;
+			ViolationRecord_Online^ rec = violationsList_online[i];
+			if (!first) json += ",";
+			System::String^ ts = rec->captureTime.ToString("HH:mm:ss");
+			System::String^ vt = rec->violationType;
+			std::string timeStr = msclr::interop::marshal_as<std::string>(ts);
+			std::string typeStr = msclr::interop::marshal_as<std::string>(vt);
+			json += "{\"id\":" + std::to_string(rec->carId) + ",\"time\":\"" + timeStr + "\",\"type\":\"" + typeStr + "\"}";
+			first = false;
+			logCount++;
+		}
+		json += "]}";
+
+		static std::string last_sent_json = "";
+		if (json != last_sent_json) {
+			last_sent_json = json;
+			g_mjpegServer_online->SetStats(json);
+		}
+	}
+
+	// Called by web API disconnect — stops camera threads but keeps the web server running
+	public: void StopProcessingPublic() {
+		shouldStop = true;
+		isProcessing = false;
+		if (processingWorker->IsBusy) processingWorker->CancelAsync();
+		// NOTE: Do NOT delete g_mjpegServer_online here — it is owned by main.cpp global web server
+		// NOTE: Do NOT stop timer1 — logging still needs it for violation checks
+		// Stop video recording thread only
+		StopVideoRecordingThread_Online();
+		DumpLog("[DISCONNECT] Camera threads stopped. Web server and timer preserved.");
+	}
 	private: void StopProcessing() {
 		shouldStop = true;
 		isProcessing = false;
@@ -1551,7 +1646,7 @@ private: System::Windows::Forms::Label^ label1;
 
 	private: System::Void LoadModel_DoWork(System::Object^ sender, DoWorkEventArgs^ e) {
 		try {
-			std::string modelPath = "models/test/yolo11n.onnx";
+			std::string modelPath = "models/test/yolo26s.onnx";
 			InitGlobalModel(modelPath);
 			e->Result = true;
 		}
@@ -1636,26 +1731,12 @@ private: System::Windows::Forms::Label^ label1;
             }
         } catch(...) {}
 
-		// *** [HEADLESS] Skip creating a new MJPEG server if already set by main.cpp ***
-		// g_mjpegServer_online is assigned from g_globalWebServer in headless mode
-		if (!g_mjpegServer_online) {
-			g_mjpegServer_online = new MjpegServer(8080);
-			if (g_mjpegServer_online->Start()) {
-                try {
-				    std::string ip = GetLocalIP();
-                    if (lblNetworkStream != nullptr) {
-				        lblNetworkStream->Text = gcnew String(("Stream: http://" + ip + ":8080").c_str());
-                    }
-                } catch(...) {}
-			} else {
-                try {
-                    if (lblNetworkStream != nullptr) {
-				        lblNetworkStream->Text = "Stream: Failed to start";
-                    }
-                } catch(...) {}
-				delete g_mjpegServer_online;
-				g_mjpegServer_online = nullptr;
-			}
+		// *** [HEADLESS] Bind to the existing global MJPEG server from main.cpp ***
+		if (!g_mjpegServer_online && g_globalWebServer) {
+			g_mjpegServer_online = g_globalWebServer;
+			DumpLog("[SERVER] Successfully linked AI Engine to Global Web Dashboard on port 8080.");
+		} else if (!g_mjpegServer_online) {
+			DumpLog("[SERVER ERROR] g_globalWebServer is null. Web Dashboard will not receive stats.");
 		} else {
 			// Already running (headless mode) — just update label if it exists
 			try {
@@ -1685,8 +1766,7 @@ private: System::Windows::Forms::Label^ label1;
 						g_frameSeq_online++;
 						currentSeq = g_frameSeq_online;
 					}
-				} else {
-					Threading::Thread::Sleep(50);
+					Threading::Thread::Sleep(5); // [OPTIMIZED] 5ms instead of 50ms to allow up to 200+ FPS reading speed
 					continue;
 				}
 			} else {
@@ -1712,13 +1792,15 @@ private: void ProcessingLoopHeadless() {
 				DrawSceneOnline(frameToProcess, seq, renderedFrame);
 
 				if (!renderedFrame.empty()) {
-					std::lock_guard<std::mutex> lock(g_processedMutex_online);
-					g_processedFrame_online = renderedFrame;
-					g_processedSeq_online = seq;
-					g_processedFramesCount_online++;
+					{
+						std::lock_guard<std::mutex> lock(g_processedMutex_online);
+						g_processedFrame_online = renderedFrame;
+						g_processedSeq_online = seq;
+						g_processedFramesCount_online++;
+					}
 
 					if (g_mjpegServer_online) {
-						g_mjpegServer_online->SetLatestFrame(g_processedFrame_online);
+						g_mjpegServer_online->SetLatestFrame(renderedFrame);
 					}
 
 					cv::Mat scaledFrame;
@@ -1736,15 +1818,25 @@ private: void ProcessingLoopHeadless() {
 						std::lock_guard<std::mutex> vidLock(g_videoCurrentFrameMutex);
 						g_videoCurrentFrame = scaledFrame.clone();
 					}
+
+					// --- Violation Checking & Stats update (every 2 seconds) ---
+					// NOTE: We do this here instead of timer1_Tick because timer1
+					// is a WinForms UI timer that may not fire in headless web mode.
+					bool parkingEnabled = g_parkingEnabled_online.load();
+					if (parkingEnabled) {
+						// Use a local copy of the frame for violation checking to avoid data races
+						cv::Mat violFrame = renderedFrame.clone();
+						CheckViolations_Online(violFrame);
+					}
 				}
 
 				lastProcessedSeq = seq;
 			}
 			else {
-				Threading::Thread::Sleep(10);
+				Threading::Thread::Sleep(2); // [OPTIMIZED] 2ms sleep to uncap AI framerate processing
 			}
 		}
-		catch (...) { Threading::Thread::Sleep(50); }
+		catch (...) { Threading::Thread::Sleep(5); }
 	}
 }
 
@@ -2220,6 +2312,7 @@ private: System::Void UploadForm_FormClosing(System::Object^ sender, FormClosing
 	// *** [NEW] VIOLATION ALERTS METHODS ***
 	private: void AddViolationRecord_Online(int carId, cv::Mat& frameCapture, System::String^ violationType, 
 									 cv::Mat fullFrame, cv::Rect carBox) {
+		DumpLog("[VIOLATION] AddViolationRecord_Online called! carId=" + std::to_string(carId) + " frameEmpty=" + std::string(frameCapture.empty() ? "yes" : "no") + " fullEmpty=" + std::string(fullFrame.empty() ? "yes" : "no"));
 		if (frameCapture.empty()) return;
 
 		Bitmap^ screenshot = gcnew Bitmap(frameCapture.cols, frameCapture.rows, System::Drawing::Imaging::PixelFormat::Format24bppRgb);
@@ -2278,11 +2371,19 @@ private: System::Void UploadForm_FormClosing(System::Object^ sender, FormClosing
 		record->captureTime = System::DateTime::Now;
 		record->durationSeconds = 0;
 
+		std::string vTypeStr = msclr::interop::marshal_as<std::string>(violationType);
+		DumpLog("[LOG-APPEND] Adding Violation Record for Car ID: " + std::to_string(carId) + " | Type: " + vTypeStr + " | Current List Size: " + std::to_string(violationsList_online->Count));
+
 		violationsList_online->Add(record);
 		RefreshViolationPanel_Online();
 	}
 
 	private: void RefreshViolationPanel_Online() {
+		if (this->InvokeRequired) {
+			this->Invoke(gcnew System::Action(this, &UploadForm::RefreshViolationPanel_Online));
+			return;
+		}
+
 		if (!flpViolations_online) return;
 
 		flpViolations_online->Controls->Clear();
@@ -2372,7 +2473,7 @@ private: void CheckViolations_Online(cv::Mat& currentFrame) {
 					
 					cv::Rect safeBbox = car.bbox & cv::Rect(0, 0, currentFrame.cols, currentFrame.rows);
 					if (safeBbox.area() > 0) {
-						cv::Mat croppedFrame = currentFrame(safeBbox).clone(); // [FIX] Clone only when capturing
+						cv::Mat croppedFrame = currentFrame(safeBbox).clone();
 						AddViolationRecord_Online(car.id, croppedFrame, L"Overstay", currentFrame, car.bbox);
 					}
 				}
@@ -2416,6 +2517,8 @@ private: void CheckViolations_Online(cv::Mat& currentFrame) {
 			System::TimeSpan duration = System::DateTime::Now - record->captureTime;
 			record->durationSeconds = (int)duration.TotalSeconds;
 		}
+
+		UpdateWebStats();
 	}
 
 	private: System::Void btnClearViolations_online_Click(System::Object^ sender, System::EventArgs^ e) {

@@ -15,6 +15,7 @@
 #include "ParkingSlot.h"
 #include "MjpegServer.h"  // [NEW] Added MjpegServer
 #include "ViolationDetailForm.h"
+#include "OnnxYoloInference.h" // [NEW] Added for ONNX GPU support
 
 #pragma managed(push, off)
 #include <opencv2/opencv.hpp>
@@ -58,7 +59,8 @@ __declspec(selectany) MjpegServer* g_mjpegServer_offline = nullptr;
 __declspec(selectany) AppState g_appState;
 __declspec(selectany) std::mutex g_stateMutex;
 
-__declspec(selectany) cv::dnn::Net* g_net_offline = nullptr;
+__declspec(selectany) cv::dnn::Net* g_net_offline = nullptr; // [DEPRECATED]
+__declspec(selectany) OnnxYoloInference* g_onnx_net_offline = nullptr; // [NEW] ONNX Runtime GPU
 __declspec(selectany) std::vector<std::string> g_classes_offline;
 __declspec(selectany) std::vector<cv::Scalar> g_colors_offline;
 __declspec(selectany) BYTETracker* g_tracker_offline = nullptr;
@@ -173,12 +175,16 @@ static void InitBackend(const std::string& modelPath) {
 	std::lock_guard<std::mutex> lock(g_aiMutex_offline);
 	g_modelReady_offline = false;
 	if (g_net_offline) { delete g_net_offline; g_net_offline = nullptr; }
+	if (g_onnx_net_offline) { delete g_onnx_net_offline; g_onnx_net_offline = nullptr; }
 	if (g_tracker_offline) { delete g_tracker_offline; g_tracker_offline = nullptr; }
 
 	try {
-		g_net_offline = new cv::dnn::Net(cv::dnn::readNetFromONNX(modelPath));
-		g_net_offline->setPreferableBackend(cv::dnn::DNN_BACKEND_OPENCV);
-		g_net_offline->setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
+		g_onnx_net_offline = new OnnxYoloInference();
+		if (!g_onnx_net_offline->loadModel(modelPath, true, g_selectedGpuId)) {
+			delete g_onnx_net_offline;
+			g_onnx_net_offline = nullptr;
+			return;
+		}
 		g_tracker_offline = new BYTETracker(90, 0.25f);
 		g_classes_offline = { "person", "bicycle", "car", "motorcycle", "bus" };
 		g_colors_offline.clear();
@@ -239,7 +245,7 @@ static void OpenCamera(const std::string& filename) {
 static void ProcessFrame(const cv::Mat& inputFrame, long long frameSeq) {
 	{
 		std::lock_guard<std::mutex> lock(g_aiMutex_offline);
-		if (inputFrame.empty() || !g_net_offline || !g_modelReady_offline || !g_tracker_offline) return;
+		if (inputFrame.empty() || !g_onnx_net_offline || !g_modelReady_offline || !g_tracker_offline) return;
 	}
 
 	try {
@@ -254,8 +260,7 @@ static void ProcessFrame(const cv::Mat& inputFrame, long long frameSeq) {
 		std::vector<cv::Mat> outputs;
 		{
 			std::lock_guard<std::mutex> lock(g_aiMutex_offline);
-			g_net_offline->setInput(blob);
-			g_net_offline->forward(outputs, g_net_offline->getUnconnectedOutLayersNames());
+			g_onnx_net_offline->forward(blob, outputs);
 		}
 
 		if (outputs.empty() || outputs[0].empty()) return;
@@ -265,36 +270,92 @@ static void ProcessFrame(const cv::Mat& inputFrame, long long frameSeq) {
 		int dimensions = output_data.size[2];
 		if (output_data.dims == 3) {
 			output_data = output_data.reshape(1, rows);
-			cv::transpose(output_data, output_data);
-			rows = output_data.rows; dimensions = output_data.cols;
+			// Only transpose if we have a format like YOLOv8 (e.g., 84x8400)
+			if (dimensions > rows) {
+				cv::transpose(output_data, output_data);
+			}
+			rows = output_data.rows; 
+			dimensions = output_data.cols;
 		}
 		else {
-			cv::Mat output_t;
-			cv::transpose(output_data.reshape(1, output_data.size[1]), output_t);
-			output_data = output_t;
-			rows = output_data.rows; dimensions = output_data.cols;
+			output_data = output_data.reshape(1, output_data.size[1]);
+			if (output_data.cols > output_data.rows) {
+				cv::Mat output_t;
+				cv::transpose(output_data, output_t);
+				output_data = output_t;
+			}
+			rows = output_data.rows; 
+			dimensions = output_data.cols;
 		}
 
 		float* data = (float*)output_data.data;
 		std::vector<int> class_ids; std::vector<float> confs; std::vector<cv::Rect> boxes;
 
+		// Check output format: yolo26s uses [cx, cy, w, h, conf, class] (6 cols)
+		bool is_yolo26s_format = (dimensions == 6);
+
 		// [PHASE 2/3] Pointer arithmetic optimized loop
 		for (int i = 0; i < rows; i++) {
-			float* classes_scores = data + 4;
-			if (dimensions >= 4 + (int)g_classes_offline.size()) {
-				cv::Mat scores(1, (int)g_classes_offline.size(), CV_32FC1, classes_scores);
-				cv::Point class_id; double max_class_score;
-				cv::minMaxLoc(scores, 0, &max_class_score, 0, &class_id);
-				if (max_class_score > CONF_THRESH && class_id.x == 2) {
-					float x = data[0]; float y = data[1]; float w = data[2]; float h = data[3];
-					float left = (x - 0.5 * w - dw) / ratio; float top = (y - 0.5 * h - dh) / ratio;
-					float width = w / ratio; float height = h / ratio;
-					boxes.push_back(cv::Rect((int)left, (int)top, (int)width, (int)height));
-					confs.push_back((float)max_class_score);
-					class_ids.push_back(class_id.x);
+			if (is_yolo26s_format) {
+				// yolo26s format: [x1, y1, x2, y2, conf, class_id] (Absolute Coordinates)
+				float x1_lb = data[0];
+				float y1_lb = data[1];
+				float x2_lb  = data[2];
+				float y2_lb  = data[3];
+				float conf  = data[4];
+				int cls     = (int)data[5];
+
+				// The Python test showed class_id can be 0 or 60. We accept any reasonable vehicle class.
+				// For the custom car model, we'll accept classes: 0, 1, 2, 3, 5, 7.
+				// However, if the user explicitly trained a custom model with only 1-2 classes, it might output 0.
+				bool is_vehicle = (cls == 0 || cls == 1 || cls == 2 || cls == 3 || cls == 5 || cls == 7);
+
+				if (conf > CONF_THRESH && is_vehicle) {
+					// Convert from letterbox corner coordinates back to original image coordinates
+					float left   = (x1_lb - dw) / ratio;
+					float top    = (y1_lb - dh) / ratio;
+					float right  = (x2_lb - dw) / ratio;
+					float bottom = (y2_lb - dh) / ratio;
+
+					float width  = right - left;
+					float height = bottom - top;
+
+					// Sanity check
+					if (width > 0 && height > 0) {
+						boxes.push_back(cv::Rect((int)left, (int)top, (int)width, (int)height));
+						confs.push_back(conf);
+						class_ids.push_back(cls);
+					}
 				}
 			}
-		 data += dimensions;
+			else {
+				// Standard YOLO format: [x_center, y_center, w, h, class_0_conf, class_1_conf, ...]
+				int num_classes = dimensions - 4;
+				if (num_classes > 0) {
+					float* classes_scores = data + 4;
+					cv::Mat scores(1, num_classes, CV_32FC1, classes_scores);
+					cv::Point class_id; double max_class_score;
+					cv::minMaxLoc(scores, 0, &max_class_score, 0, &class_id);
+
+					// Universal Vehicle Detection (Custom or COCO)
+					bool is_vehicle = (class_id.x == 0 || class_id.x == 1 || class_id.x == 2 || class_id.x == 3 || class_id.x == 5 || class_id.x == 7);
+
+					if (max_class_score > CONF_THRESH && is_vehicle) {
+						float x = data[0]; float y = data[1]; float w = data[2]; float h = data[3];
+						float left = (x - 0.5 * w - dw) / ratio; 
+						float top = (y - 0.5 * h - dh) / ratio;
+						float width = w / ratio; 
+						float height = h / ratio;
+
+						if (width > 0 && height > 0) {
+							boxes.push_back(cv::Rect((int)left, (int)top, (int)width, (int)height));
+							confs.push_back((float)max_class_score);
+							class_ids.push_back(class_id.x);
+						}
+					}
+				}
+			}
+			data += dimensions;
 		}
 
 		std::vector<int> nms;
@@ -1281,7 +1342,7 @@ namespace ConsoleApplication3 {
 
 	private: System::Void LoadModel_DoWork(System::Object^ sender, DoWorkEventArgs^ e) {
 		try {
-			std::string modelPath = "models/test/yolo11n.onnx";
+			std::string modelPath = "models/test/yolo26s.onnx";
 			InitBackend(modelPath);
 			e->Result = true;
 		}
