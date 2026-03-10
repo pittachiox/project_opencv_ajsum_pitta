@@ -1,0 +1,44 @@
+MSBuild version 18.3.0-release-26070-10+3972042b7 for .NET Framework
+Build started 3/10/2026 2:29:08 PM.
+
+Project "C:\Users\kt856\source\repos\project_opencv_ajsum_nikom\ConsoleApplication3.vcxproj" on node 1 (Build target(s)).
+PrepareForBuild:
+  Structured output is enabled. The formatting of compiler diagnostics will reflect the error hierarchy. See https://aka.ms/cpp/structured-output for more details.
+InitializeBuildStatus:
+  Touching "ConsoleA.ABDB059B\x64\Release\ConsoleA.ABDB059B.tlog\unsuccessfulbuild".
+GenerateTargetFrameworkMonikerAttribute:
+Skipping target "GenerateTargetFrameworkMonikerAttribute" because all output files are up-to-date with respect to the input files.
+ClCompile:
+  All outputs are up-to-date.
+  All outputs are up-to-date.
+  All outputs are up-to-date.
+CreateManifestResourceNames:
+  All outputs are up-to-date.
+CoreResGen:
+  Task assembly was loaded from 'C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\Microsoft.Build.dll' while the desired location was 'C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\Microsoft.Build.Tasks.Core.dll'.
+  No resources are out of date with respect to their source files. Skipping resource generation.
+ResourceCompile:
+  All outputs are up-to-date.
+Link:
+  C:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\MSVC\14.50.35717\bin\HostX86\x64\link.exe /ERRORREPORT:QUEUE /OUT:"C:\Users\kt856\source\repos\project_opencv_ajsum_nikom\x64\Release\ConsoleApplication3.exe" /NOLOGO /LIBPATH:C:\opencv\build\x64\vc16\lib /LIBPATH:"C:\Users\kt856\source\repos\project_opencv_ajsum_nikom\onnxruntime-win-x64-gpu-1.20.1\lib" opencv_world4120.lib onnxruntime.lib onnxruntime_providers_cuda.lib onnxruntime_providers_shared.lib /ASSEMBLYRESOURCE:ConsoleA.ABDB059B\x64\Release\ConsoleApplication3.MyForm.resources /ASSEMBLYRESOURCE:ConsoleA.ABDB059B\x64\Release\ConsoleApplication3.offline1.resources /ASSEMBLYRESOURCE:ConsoleA.ABDB059B\x64\Release\ConsoleApplication3.ParkingSetupForm.resources /ASSEMBLYRESOURCE:ConsoleA.ABDB059B\x64\Release\ConsoleApplication3.popup1.resources /ASSEMBLYRESOURCE:ConsoleA.ABDB059B\x64\Release\ConsoleApplication3.online1.resources /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /DEBUG:FULL /PDB:"C:\Users\kt856\source\repos\project_opencv_ajsum_nikom\x64\Release\ConsoleApplication3.pdb" /SUBSYSTEM:WINDOWS /TLBID:1 /ENTRY:"Main" /DYNAMICBASE /FIXED:NO /NXCOMPAT /MACHINE:X64 ConsoleA.ABDB059B\x64\Release\app.res
+  ConsoleA.ABDB059B\x64\Release\AssemblyInfo.obj
+  ConsoleA.ABDB059B\x64\Release\MyForm.obj
+  ConsoleA.ABDB059B\x64\Release\offline1.obj
+  ConsoleA.ABDB059B\x64\Release\ParkingSetupForm.obj
+  ConsoleA.ABDB059B\x64\Release\pch.obj
+  ConsoleA.ABDB059B\x64\Release\main.obj
+  ConsoleA.ABDB059B\x64\Release\popup1.obj
+  "ConsoleA.ABDB059B\x64\Release\.NETFramework,Version=v4.7.2.AssemblyAttributes.obj"
+LINK : fatal error LNK1104: cannot open file 'C:\Users\kt856\source\repos\project_opencv_ajsum_nikom\x64\Release\ConsoleApplication3.exe' [C:\Users\kt856\source\repos\project_opencv_ajsum_nikom\ConsoleApplication3.vcxproj]
+Done Building Project "C:\Users\kt856\source\repos\project_opencv_ajsum_nikom\ConsoleApplication3.vcxproj" (Build target(s)) -- FAILED.
+
+Build FAILED.
+
+"C:\Users\kt856\source\repos\project_opencv_ajsum_nikom\ConsoleApplication3.vcxproj" (Build target) (1) ->
+(Link target) -> 
+  LINK : fatal error LNK1104: cannot open file 'C:\Users\kt856\source\repos\project_opencv_ajsum_nikom\x64\Release\ConsoleApplication3.exe' [C:\Users\kt856\source\repos\project_opencv_ajsum_nikom\ConsoleApplication3.vcxproj]
+
+    0 Warning(s)
+    1 Error(s)
+
+Time Elapsed 00:00:00.69

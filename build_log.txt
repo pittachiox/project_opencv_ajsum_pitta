@@ -1,0 +1,45 @@
+MSBuild version 18.3.0-release-26070-10+3972042b7 for .NET Framework
+Build started 3/10/2026 2:16:47 PM.
+
+Project "C:\Users\kt856\source\repos\project_opencv_ajsum_nikom\ConsoleApplication3.vcxproj" on node 1 (Build target(s)).
+PrepareForBuild:
+  Structured output is enabled. The formatting of compiler diagnostics will reflect the error hierarchy. See https://aka.ms/cpp/structured-output for more details.
+InitializeBuildStatus:
+  Touching "ConsoleA.ABDB059B\Release\ConsoleA.ABDB059B.tlog\unsuccessfulbuild".
+GenerateTargetFrameworkMonikerAttribute:
+Skipping target "GenerateTargetFrameworkMonikerAttribute" because all output files are up-to-date with respect to the input files.
+ClCompile:
+  All outputs are up-to-date.
+  C:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\MSVC\14.50.35717\bin\HostX86\x86\CL.exe /c /IC:\opencv\build\include /AI"C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2\\" /AI"C:\Program Files (x86)\Windows Kits\10\References" /AI"C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2\Facades\\" /Zi /clr /nologo /W3 /WX- /diagnostics:column /O2 /Oy- /D WIN32 /D NDEBUG /D _UNICODE /D UNICODE /EHa /MD /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Yu"pch.h" /Fp"ConsoleA.ABDB059B\Release\ConsoleApplication3.pch" /Fo"ConsoleA.ABDB059B\Release\\" /Fd"ConsoleA.ABDB059B\Release\vc145.pdb" /external:W3 /TP /FU"C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2\mscorlib.dll" /FU"C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2\System.Data.dll" /FU"C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2\System.dll" /FU"C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2\System.Drawing.dll" /FU"C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2\System.Windows.Forms.dll" /FU"C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2\System.Xml.dll" /analyze- /FC /errorReport:queue /clr:nostdlib MyForm.cpp offline1.cpp main.cpp popup1.cpp
+  MyForm.cpp
+  offline1.cpp
+C:\Users\kt856\source\repos\project_opencv_ajsum_nikom\OnnxYoloInference.h(5,10): error C1083: Cannot open include file: 'onnxruntime_cxx_api.h': No such file or directory [C:\Users\kt856\source\repos\project_opencv_ajsum_nikom\ConsoleApplication3.vcxproj]
+  (compiling source file '/MyForm.cpp')
+  
+C:\Users\kt856\source\repos\project_opencv_ajsum_nikom\OnnxYoloInference.h(5,10): error C1083: Cannot open include file: 'onnxruntime_cxx_api.h': No such file or directory [C:\Users\kt856\source\repos\project_opencv_ajsum_nikom\ConsoleApplication3.vcxproj]
+  (compiling source file '/offline1.cpp')
+  
+  main.cpp
+C:\Users\kt856\source\repos\project_opencv_ajsum_nikom\OnnxYoloInference.h(5,10): error C1083: Cannot open include file: 'onnxruntime_cxx_api.h': No such file or directory [C:\Users\kt856\source\repos\project_opencv_ajsum_nikom\ConsoleApplication3.vcxproj]
+  (compiling source file '/main.cpp')
+  
+  popup1.cpp
+C:\Users\kt856\source\repos\project_opencv_ajsum_nikom\OnnxYoloInference.h(5,10): error C1083: Cannot open include file: 'onnxruntime_cxx_api.h': No such file or directory [C:\Users\kt856\source\repos\project_opencv_ajsum_nikom\ConsoleApplication3.vcxproj]
+  (compiling source file '/popup1.cpp')
+  
+  Generating Code...
+Done Building Project "C:\Users\kt856\source\repos\project_opencv_ajsum_nikom\ConsoleApplication3.vcxproj" (Build target(s)) -- FAILED.
+
+Build FAILED.
+
+"C:\Users\kt856\source\repos\project_opencv_ajsum_nikom\ConsoleApplication3.vcxproj" (Build target) (1) ->
+(ClCompile target) -> 
+  C:\Users\kt856\source\repos\project_opencv_ajsum_nikom\OnnxYoloInference.h(5,10): error C1083: Cannot open include file: 'onnxruntime_cxx_api.h': No such file or directory [C:\Users\kt856\source\repos\project_opencv_ajsum_nikom\ConsoleApplication3.vcxproj]
+  C:\Users\kt856\source\repos\project_opencv_ajsum_nikom\OnnxYoloInference.h(5,10): error C1083: Cannot open include file: 'onnxruntime_cxx_api.h': No such file or directory [C:\Users\kt856\source\repos\project_opencv_ajsum_nikom\ConsoleApplication3.vcxproj]
+  C:\Users\kt856\source\repos\project_opencv_ajsum_nikom\OnnxYoloInference.h(5,10): error C1083: Cannot open include file: 'onnxruntime_cxx_api.h': No such file or directory [C:\Users\kt856\source\repos\project_opencv_ajsum_nikom\ConsoleApplication3.vcxproj]
+  C:\Users\kt856\source\repos\project_opencv_ajsum_nikom\OnnxYoloInference.h(5,10): error C1083: Cannot open include file: 'onnxruntime_cxx_api.h': No such file or directory [C:\Users\kt856\source\repos\project_opencv_ajsum_nikom\ConsoleApplication3.vcxproj]
+
+    0 Warning(s)
+    4 Error(s)
+
+Time Elapsed 00:00:04.53

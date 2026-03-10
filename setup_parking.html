@@ -501,6 +501,14 @@
         const container = document.getElementById('canvas-container');
         const statusBar = document.getElementById('statusBar');
 
+        // Read camera ID from URL parameter (e.g. /setup_parking?id=2)
+        const urlParams = new URLSearchParams(window.location.search);
+        const camId = urlParams.get('id') || '1';
+
+        // Show which camera is being configured
+        document.title = 'Parking Setup — Camera ' + camId;
+        statusBar.textContent = 'Camera ' + camId + ' — Click "Load Live Frame" to load a frame from this camera.';
+
         let bgImage = null;       // Background image (cv::Mat frame)
         let slots = [];           // Array of completed slots [{id, type, polygon:[{x,y},...]}]
         let currentPoly = [];     // Points being drawn
@@ -718,7 +726,7 @@
             img.onerror = () => {
                 statusBar.textContent = 'No camera frame available. Connect camera first via Home > Live Camera.';
             };
-            img.src = '/api/current_frame?t=' + Date.now();
+            img.src = '/api/' + camId + '/current_frame?t=' + Date.now();
         }
 
         // ===================== Load template from file =====================
@@ -810,14 +818,14 @@
             });
             xml += '</opencv_storage>\n';
 
-            fetch('/api/save_template', {
+            fetch('/api/' + camId + '/save_template', {
                 method: 'POST',
                 headers: { 'Content-Type': 'text/xml' },
                 body: xml
             }).then(r => r.json()).then(result => {
                 if (result.status === 'success') {
-                    statusBar.textContent = '[OK] Template saved! ' + slots.length + ' slots active. Redirecting to dashboard...';
-                    setTimeout(() => window.location.href = '/dashboard', 1500);
+                    statusBar.textContent = '[OK] Template saved for Camera ' + camId + '! ' + slots.length + ' slots active. Redirecting...';
+                    setTimeout(() => window.location.href = '/', 1500);
                 } else {
                     statusBar.textContent = 'Save failed. Check if camera is connected.';
                 }

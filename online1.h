@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #define NOMINMAX // [PHASE 1 FIX] Move to top BEFORE any includes
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -431,8 +431,8 @@ public:
 			OutputDebugStringA(("[INFO] Online mode with ONNX Runtime GPU + ByteTrack for camera " + std::to_string(camera_id) + "\n").c_str());
 
 			g_classes = {
-				"bicycle", "car", "motorcycle", "bus", "train", "truck"
-			};
+				"person", "bicycle", "Car", "Motorcycle", "airplane", "bus", "train", "Van"
+			}; // index 2=Car, 3=Motorcycle, 7=Van
 
 			g_colors.clear();
 			for (size_t i = 0; i < g_classes.size(); i++) {
@@ -585,10 +585,8 @@ inline void CameraInstance::ProcessFrameOnline(const cv::Mat& inputFrame, long l
 				float conf  = data[4];
 				int cls     = (int)data[5];
 
-				// The Python test showed class_id can be 0 or 60. We accept any reasonable vehicle class.
-				// For the custom car model, we'll accept classes: 0, 1, 2, 3, 5, 7.
-				// However, if the user explicitly trained a custom model with only 1-2 classes, it might output 0.
-				bool is_vehicle = (cls == 0 || cls == 1 || cls == 2 || cls == 3 || cls == 5 || cls == 7);
+				// Only detect: Car (2), Motorcycle (3), Van/Truck (7)
+				bool is_vehicle = (cls == 2 || cls == 3 || cls == 7);
 
 				if (conf > CONF_THRESHOLD && is_vehicle) {
 					// Convert from letterbox corner coordinates back to original image coordinates
@@ -618,7 +616,8 @@ inline void CameraInstance::ProcessFrameOnline(const cv::Mat& inputFrame, long l
 					double max_class_score;
 					cv::minMaxLoc(scores, 0, &max_class_score, 0, &class_id);
 
-					bool is_vehicle = (class_id.x == 0 || class_id.x == 1 || class_id.x == 2 || class_id.x == 3 || class_id.x == 5 || class_id.x == 7);
+					// Only detect: Car (2), Motorcycle (3), Van/Truck (7)
+					bool is_vehicle = (class_id.x == 2 || class_id.x == 3 || class_id.x == 7);
 
 					if (max_class_score > CONF_THRESHOLD && is_vehicle) {
 						float x = data[0]; 
@@ -1154,6 +1153,12 @@ namespace ConsoleApplication3 {
 		}
 
 		if (connected) {
+			// If this camera was dynamically created/restarted from web config,
+			// the AI model won't be loaded yet. Initialize it now before processing starts.
+			if (!GetCam(cameraId)->g_modelReady || !GetCam(cameraId)->g_onnx_net) {
+				DumpLog("[INFO] Initializing AI model for camera " + std::to_string(cameraId));
+				GetCam(cameraId)->InitGlobalModel("models/test/yolo26s.onnx");
+			}
 			GetCam(cameraId)->StartProcessing();
 			timer1->Start(); // Ensure UI tick still runs
 			return true;
