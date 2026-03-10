@@ -1312,9 +1312,9 @@ namespace ConsoleApplication3 {
 		if (lblNetworkStream) lblNetworkStream->Text = "Stream: Offline";
 	}
 
-	// *** [NEW] Get Local IP helper ***
+	// ===================== Managed: get local IP =====================
 	private: std::string GetLocalIP() {
-		System::String^ bestIP = "127.0.0.1";
+		System::String^ bestIP = "0.0.0.0";
 		try {
 			cli::array<System::Net::NetworkInformation::NetworkInterface^>^ interfaces = System::Net::NetworkInformation::NetworkInterface::GetAllNetworkInterfaces();
 			for each (System::Net::NetworkInformation::NetworkInterface^ adapter in interfaces) {

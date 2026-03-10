@@ -126,7 +126,7 @@ inline void TriggerDisconnectHeadlessWrapperMain(int cameraId) {
 
 // ===================== Managed: get local IP =====================
 System::String^ GetLocalIPMain() {
-    System::String^ bestIP = "127.0.0.1";
+    System::String^ bestIP = "0.0.0.0";
     try {
         cli::array<System::Net::NetworkInformation::NetworkInterface^>^ interfaces = System::Net::NetworkInformation::NetworkInterface::GetAllNetworkInterfaces();
         for each (System::Net::NetworkInformation::NetworkInterface^ adapter in interfaces) {

@@ -71,8 +71,36 @@ namespace ConsoleApplication3 {
 			onlineForm->Hide();
 		}
 		
-		// Open the default browser to the web interface
-		System::Diagnostics::Process::Start("http://localhost:8080/");
+		// Open the default browser to the web interface using the actual IPv4 address
+		std::string ip = GetLocalIP();
+		System::String^ url = gcnew System::String(("http://" + ip + ":8080/").c_str());
+		System::Diagnostics::Process::Start(url);
+	}
+
+	private: std::string GetLocalIP() {
+		System::String^ bestIP = "127.0.0.1";
+		try {
+			cli::array<System::Net::NetworkInformation::NetworkInterface^>^ interfaces = System::Net::NetworkInformation::NetworkInterface::GetAllNetworkInterfaces();
+			for each (System::Net::NetworkInformation::NetworkInterface^ adapter in interfaces) {
+				if (adapter->OperationalStatus == System::Net::NetworkInformation::OperationalStatus::Up) {
+					System::String^ desc = adapter->Description->ToLower();
+					if (desc->Contains("virtual") || desc->Contains("vpn") || desc->Contains("vmware") || desc->Contains("radmin") || desc->Contains("hamachi")) continue;
+					
+					System::Net::NetworkInformation::IPInterfaceProperties^ properties = adapter->GetIPProperties();
+					for each (System::Net::NetworkInformation::UnicastIPAddressInformation^ ip in properties->UnicastAddresses) {
+						if (ip->Address->AddressFamily == System::Net::Sockets::AddressFamily::InterNetwork) {
+							System::String^ ipStr = ip->Address->ToString();
+							if (ipStr->StartsWith("26.") || ipStr->StartsWith("169.254.")) continue;
+							bestIP = ipStr;
+							if (ipStr->StartsWith("192.168.") || ipStr->StartsWith("172.") || ipStr->StartsWith("10.")) {
+								return msclr::interop::marshal_as<std::string>(bestIP);
+							}
+						}
+					}
+				}
+			}
+		} catch (...) {}
+		return msclr::interop::marshal_as<std::string>(bestIP);
 	}
 
 	protected:

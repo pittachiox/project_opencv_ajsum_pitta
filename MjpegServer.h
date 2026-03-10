@@ -348,16 +348,37 @@ private:
 
     void ServeJsonDirectoryAsArray(SOCKET clientSocket, const std::string& dirPath, int limit = -1) {
         std::vector<std::string> fileNames;
-        WIN32_FIND_DATAA findData;
-        HANDLE hFind = FindFirstFileA((dirPath + "\\*.json").c_str(), &findData);
-        
-        if (hFind != INVALID_HANDLE_VALUE) {
+
+        auto scanDirectory = [&](const std::string& path) {
+            WIN32_FIND_DATAA findData;
+            HANDLE hFind = FindFirstFileA((path + "\\*.json").c_str(), &findData);
+            
+            if (hFind != INVALID_HANDLE_VALUE) {
+                do {
+                    if (!(findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+                        fileNames.push_back(path + "\\" + findData.cFileName);
+                    }
+                } while (FindNextFileA(hFind, &findData));
+                FindClose(hFind);
+            }
+        };
+
+        // 1. Scan root (legacy support)
+        scanDirectory(dirPath);
+
+        // 2. Scan subdirectories (camera_1, camera_2, etc.)
+        WIN32_FIND_DATAA subFindData;
+        HANDLE hSubFind = FindFirstFileA((dirPath + "\\*").c_str(), &subFindData);
+        if (hSubFind != INVALID_HANDLE_VALUE) {
             do {
-                if (!(findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
-                    fileNames.push_back(findData.cFileName);
+                if ((subFindData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+                    std::string subDirName = subFindData.cFileName;
+                    if (subDirName != "." && subDirName != "..") {
+                        scanDirectory(dirPath + "\\" + subDirName);
+                    }
                 }
-            } while (FindNextFileA(hFind, &findData));
-            FindClose(hFind);
+            } while (FindNextFileA(hSubFind, &subFindData));
+            FindClose(hSubFind);
         }
         
         // Sort descending (newest epoch first)
@@ -367,10 +388,9 @@ private:
         bool first = true;
         int count = 0;
         
-        for (const std::string& fileName : fileNames) {
+        for (const std::string& filePath : fileNames) {
             if (limit > 0 && count >= limit) break;
             
-            std::string filePath = dirPath + "\\" + fileName;
             std::ifstream inFile(filePath);
             if (inFile.is_open()) {
                 std::stringstream buffer;
